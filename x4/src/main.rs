@@ -7,18 +7,22 @@
 )]
 #![deny(clippy::large_stack_frames)]
 
-use esp_hal::peripherals::{ADC1, ADC2};
-use microreader::eink_display::{EInkDisplay, RefreshMode, Rotation};
-use microreader::buttons::*;
+pub mod eink_display;
+pub mod input;
+
+use crate::eink_display::{EInkDisplay, RefreshMode, Rotation};
+use crate::input::*;
+use embedded_graphics::primitives::Line;
+use microreader_core::input::Buttons;
 use esp_backtrace as _;
 use esp_hal::clock::CpuClock;
-use esp_hal::main;
+use esp_hal::{Blocking, main};
 use esp_hal::spi::master::{Config, Spi};
 use esp_hal::time::Rate;
 use esp_hal::delay::Delay;
 use esp_hal::gpio::{Input, InputConfig, Level, Output, OutputConfig};
 use esp_hal::spi::Mode;
-use log::info;
+use log::{info, error};
 use embedded_graphics::{
     mono_font::{ascii::FONT_10X20, MonoTextStyle},
     pixelcolor::BinaryColor,
@@ -99,7 +103,7 @@ fn main() -> ! {
 
     info!("Drawing with embedded_graphics");
 
-    let mut button_state = ButtonState::new(peripherals.GPIO1, peripherals.GPIO2, peripherals.GPIO3, peripherals.ADC1);
+    let mut button_state = GpioButtonState::new(peripherals.GPIO1, peripherals.GPIO2, peripherals.GPIO3, peripherals.ADC1);
     let mut dirty = true;
     
     info!("Display complete! Starting rotation demo...");
@@ -112,10 +116,11 @@ fn main() -> ! {
         delay.delay_millis(10);
 
         button_state.update();
-        if button_state.is_pressed(Buttons::Left) {
+        let buttons = button_state.get_buttons();
+        if buttons.is_pressed(Buttons::Left) {
             rotation_index = (rotation_index + rotations.len() - 1) % rotations.len();
             info!("Button Left Pressed");
-        } else if button_state.is_pressed(Buttons::Right) {
+        } else if buttons.is_pressed(Buttons::Right) {
             rotation_index = (rotation_index + 1) % rotations.len();
             info!("Button Right Pressed");
         } else if !dirty {
@@ -126,37 +131,91 @@ fn main() -> ! {
         
         info!("Setting rotation to {:?}", new_rotation);
         display.set_rotation(new_rotation);
-        
-        // Clear and redraw with new rotation
-        display.clear(BinaryColor::Off).ok();
-        
-        // Get the current display size (changes with rotation)
-        let size = display.size() - Size::new(20, 20);
-        
-        // Draw a border rectangle that fits the rotated display
-        Rectangle::new(Point::new(10, 10), size)
-            .into_styled(PrimitiveStyle::with_stroke(BinaryColor::On, 2))
-            .draw(&mut display)
-            .ok();
 
-        // Draw some circles
-        Circle::new(Point::new(100, 100), 80)
-            .into_styled(PrimitiveStyle::with_stroke(BinaryColor::On, 3))
-            .draw(&mut display)
-            .ok();
+        if let Err(e) = update_display(&mut display) {
+            error!("Error updating display: {}", e);
+        }
 
-        Circle::new(Point::new(200, 100), 60)
-            .into_styled(PrimitiveStyle::with_fill(BinaryColor::On))
-            .draw(&mut display)
-            .ok();
-
-        // Draw text
-        let text_style = MonoTextStyle::new(&FONT_10X20, BinaryColor::On);
-        Text::new("Hello from rust", Point::new(20, 30), text_style)
-            .draw(&mut display)
-            .ok();
-
-        display.display_buffer(RefreshMode::Fast).ok();
         dirty = false;
     }
+}
+
+fn update_display(display: &mut EInkDisplay<'_, Spi<'_, Blocking>, Output<'_>, Output<'_>, Output<'_>, Input<'_>>)
+    -> Result<(), &'static str> {
+    // Clear and redraw with new rotation
+    display.clear(BinaryColor::Off).ok();
+    
+    // Get the current display size (changes with rotation)
+    let size = display.size() - Size::new(22, 22);
+    
+    // Draw a border rectangle that fits the rotated display
+    Rectangle::new(Point::new(10, 10), size)
+        .into_styled(PrimitiveStyle::with_stroke(BinaryColor::On, 2))
+        .draw(display)
+        .ok();
+
+    // Draw some circles
+    Circle::new(Point::new(100, 100), 80)
+        .into_styled(PrimitiveStyle::with_stroke(BinaryColor::On, 3))
+        .draw(display)
+        .ok();
+
+    Circle::new(Point::new(200, 100), 60)
+        .into_styled(PrimitiveStyle::with_fill(BinaryColor::On))
+        .draw(display)
+        .ok();
+
+    // Draw text
+    let text_style = MonoTextStyle::new(&FONT_10X20, BinaryColor::On);
+    Text::new("Hello from rust", Point::new(20, 30), text_style)
+        .draw(display)
+        .ok();
+
+    let line_width = display.size().width as i32 - 202;
+
+    // Black
+    Line::new(Point::new(100, 100), Point::new(line_width, 100))
+        .into_styled(PrimitiveStyle::with_stroke(BinaryColor::On, 2))
+        .draw(display)
+        .ok();
+
+    display.display_buffer(RefreshMode::Fast)?;
+
+    display.clear(BinaryColor::Off).ok();
+    // Dark Gray
+    Line::new(Point::new(100, 200), Point::new(line_width, 200))
+        .into_styled(PrimitiveStyle::with_stroke(BinaryColor::On, 2))
+        .draw(display)
+        .ok();
+
+    // Gray
+    Line::new(Point::new(100, 300), Point::new(line_width, 300))
+        .into_styled(PrimitiveStyle::with_stroke(BinaryColor::On, 2))
+        .draw(display)
+        .ok();
+
+    // unsafe {
+    //     let fb = display.frame_buffer();
+    //     display.copy_msb(fb).ok();
+    // };
+    display.copy_lsb()?;
+
+    display.clear(BinaryColor::Off).ok();
+    // Dark Gray
+    Line::new(Point::new(100, 200), Point::new(line_width, 200))
+        .into_styled(PrimitiveStyle::with_stroke(BinaryColor::On, 2))
+        .draw(display)
+        .ok();
+
+    // Light Gray
+    Line::new(Point::new(100, 400), Point::new(line_width, 400))
+        .into_styled(PrimitiveStyle::with_stroke(BinaryColor::On, 2))
+        .draw(display)
+        .ok();
+
+    display.copy_msb()?;
+
+    display.display_gray_buffer(false)?;
+
+    Ok(())
 }

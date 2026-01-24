@@ -10,7 +10,7 @@ use embedded_graphics::{
     prelude::*,
     Pixel,
 };
-use log::{info, error};
+use log::{debug, error, info, warn};
 
 // SSD1677 Command Definitions
 #[allow(dead_code)]
@@ -60,7 +60,6 @@ const DATA_ENTRY_X_INC_Y_DEC: u8 = 0x01;
 const TEMP_SENSOR_INTERNAL: u8 = 0x80;
 
 /// Custom LUT for grayscale fast refresh
-#[allow(dead_code)]
 const LUT_GRAYSCALE: &[u8] = &[
     // 00 black/white
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -89,6 +88,40 @@ const LUT_GRAYSCALE: &[u8] = &[
     0x17, 0x41, 0xA8, 0x32, 0x30,
     // Reserved
     0x00, 0x00,
+];
+
+const LUT_GRAYSCALE_REVERT: &[u8] = &[
+    // 00 black/white
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    // 10 gray
+    0x54, 0x54, 0x54, 0x54, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    // 01 light gray
+    0xA8, 0xA8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    // 11 dark gray
+    0xFC, 0xFC, 0xFC, 0xFC, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    // L4 (VCOM)
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+
+    // TP/RP groups (global timing)
+    0x01, 0x01, 0x01, 0x01, 0x01,  // G0: A=1 B=1 C=1 D=1 RP=0 (4 frames)
+    0x01, 0x01, 0x01, 0x01, 0x01,  // G1: A=1 B=1 C=1 D=1 RP=0 (4 frames)
+    0x01, 0x01, 0x01, 0x01, 0x00,  // G2: A=0 B=0 C=0 D=0 RP=0 (4 frames)
+    0x01, 0x01, 0x01, 0x01, 0x00,  // G3: A=0 B=0 C=0 D=0 RP=0
+    0x00, 0x00, 0x00, 0x00, 0x00,  // G4: A=0 B=0 C=0 D=0 RP=0
+    0x00, 0x00, 0x00, 0x00, 0x00,  // G5: A=0 B=0 C=0 D=0 RP=0
+    0x00, 0x00, 0x00, 0x00, 0x00,  // G6: A=0 B=0 C=0 D=0 RP=0
+    0x00, 0x00, 0x00, 0x00, 0x00,  // G7: A=0 B=0 C=0 D=0 RP=0
+    0x00, 0x00, 0x00, 0x00, 0x00,  // G8: A=0 B=0 C=0 D=0 RP=0
+    0x00, 0x00, 0x00, 0x00, 0x00,  // G9: A=0 B=0 C=0 D=0 RP=0
+
+    // Frame rate
+    0x8F, 0x8F, 0x8F, 0x8F, 0x8F,
+
+    // Voltages (VGH, VSH1, VSH2, VSL, VCOM)
+    0x17, 0x41, 0xA8, 0x32, 0x30,
+
+    // Reserved
+    0x00, 0x00
 ];
 
 /// Refresh modes for the display
@@ -233,19 +266,43 @@ where
         self.rotation
     }
 
+    pub fn copy_lsb(&mut self) -> Result<(), &'static str> {
+        // self.set_ram_area(0, 0, w, h)
+        unsafe {
+            let current_ptr = if self.active_buffer {
+                self.frame_buffer_1.as_ptr()
+            } else {
+                self.frame_buffer_0.as_ptr()
+            };
+            let current_slice = core::slice::from_raw_parts(current_ptr, Self::BUFFER_SIZE);
+
+            self.write_ram_buffer(commands::WRITE_RAM_BW, current_slice)
+        }
+    }
+
+    pub fn copy_msb(&mut self) -> Result<(), &'static str> {
+        unsafe {
+            let current_ptr = if self.active_buffer {
+                self.frame_buffer_1.as_ptr()
+            } else {
+                self.frame_buffer_0.as_ptr()
+            };
+            let current_slice = core::slice::from_raw_parts(current_ptr, Self::BUFFER_SIZE);
+
+            self.write_ram_buffer(commands::WRITE_RAM_RED, current_slice)
+        }
+    }
+
     /// Display the current frame buffer
-    pub fn display_buffer(&mut self, mode: RefreshMode) -> Result<(), &'static str> {
-        let mut actual_mode = mode;
-        
+    pub fn display_buffer(&mut self, mut mode: RefreshMode) -> Result<(), &'static str> {
         if !self.is_screen_on {
             // Force half refresh if screen is off
-            actual_mode = RefreshMode::Half;
+            mode = RefreshMode::Half;
         }
 
         // If currently in grayscale mode, revert first to black/white
         if self.in_grayscale_mode {
-            self.in_grayscale_mode = false;
-            // Note: grayscale revert not fully implemented in this basic version
+            self.grayscale_revert_internal()?;
         }
 
         // Set up full screen RAM area
@@ -270,7 +327,7 @@ where
             let current_slice = core::slice::from_raw_parts(current_ptr, Self::BUFFER_SIZE);
             let previous_slice = core::slice::from_raw_parts(previous_ptr, Self::BUFFER_SIZE);
             
-            match actual_mode {
+            match mode {
                 RefreshMode::Full | RefreshMode::Half => {
                     // For full refresh, write current buffer to both RAM buffers
                     self.write_ram_buffer(commands::WRITE_RAM_BW, current_slice)?;
@@ -288,8 +345,47 @@ where
         self.swap_buffers();
 
         // Refresh the display
-        self.refresh_display(actual_mode, false)?;
+        self.refresh_display(mode, false)?;
 
+        Ok(())
+    }
+
+    pub fn display_gray_buffer(&mut self, turn_off_screen: bool) -> Result<(), &'static str> {
+        warn!("Displaying grayscale buffer");
+        self.in_grayscale_mode = true;
+        self.set_custom_lut(LUT_GRAYSCALE)?;
+        self.refresh_display(RefreshMode::Fast, turn_off_screen)?;
+        self.custom_lut_active = false;
+        Ok(())
+    }
+
+    fn grayscale_revert_internal(&mut self) -> Result<(), &'static str> {
+        warn!("Reverting grayscale buffer");
+        self.in_grayscale_mode = false;
+        self.set_custom_lut(LUT_GRAYSCALE_REVERT)?;
+        self.refresh_display(RefreshMode::Fast, false)?;
+        self.custom_lut_active = false;
+        Ok(())
+    }
+
+    fn set_custom_lut(&mut self, lut: &[u8]) -> Result<(), &'static str> {
+        info!("Setting custom LUT");
+
+        self.send_command(commands::WRITE_LUT)?;
+        self.send_data(&lut[0..=104])?;
+
+        self.send_command(commands::GATE_VOLTAGE)?;
+        self.send_data(&[lut[105]])?;
+
+        self.send_command(commands::SOURCE_VOLTAGE)?;
+        self.send_data(&[lut[106]])?;
+        self.send_data(&[lut[107]])?;
+        self.send_data(&[lut[108]])?;
+
+        self.send_command(commands::WRITE_VCOM)?;
+        self.send_data(&[lut[109]])?;
+
+        self.custom_lut_active = true;
         Ok(())
     }
 
@@ -436,6 +532,7 @@ where
     }
 
     fn write_ram_buffer(&mut self, ram_buffer: u8, data: &[u8]) -> Result<(), &'static str> {
+        self.set_ram_area(0, 0, Self::WIDTH as u16, Self::HEIGHT as u16)?;
         let buffer_name = if ram_buffer == commands::WRITE_RAM_BW { "BW" } else { "RED" };
         info!("Writing frame buffer to {} RAM ({} bytes)", buffer_name, data.len());
 
