@@ -1,12 +1,21 @@
 //! SSD1677 E-Ink Display Driver
-//! 
+//!
 //! This module provides a driver for the SSD1677 e-ink display controller
 //! optimized for the GDEQ0426T82 4.26" 800x480 e-paper display.
+//! https://github.com/CidVonHighwind/microreader/
 
-use esp_hal::delay::Delay;
-use embedded_hal::digital::{InputPin, OutputPin};
+use embedded_hal::spi::SpiBus;
+use esp_hal::{
+    Blocking,
+    delay::Delay,
+    gpio::{Input, Output},
+    spi::{Error as SpiError, master::Spi},
+};
 use log::{error, info, warn};
-use microreader_core::{display::{Display, RefreshMode}, framebuffer::{BUFFER_SIZE, DisplayBuffers}};
+use microreader_core::{
+    display::{Display, RefreshMode},
+    framebuffer::{BUFFER_SIZE, DisplayBuffers},
+};
 
 // SSD1677 Command Definitions
 #[allow(dead_code)]
@@ -58,96 +67,66 @@ const TEMP_SENSOR_INTERNAL: u8 = 0x80;
 /// Custom LUT for grayscale fast refresh
 const LUT_GRAYSCALE: &[u8] = &[
     // 00 black/white
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    // 01 light gray
-    0x54, 0x54, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    // 10 gray
-    0xAA, 0xA0, 0xA8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    // 11 dark gray
-    0xA2, 0x22, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    // L4 (VCOM)
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 01 light gray
+    0x54, 0x54, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 10 gray
+    0xAA, 0xA0, 0xA8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 11 dark gray
+    0xA2, 0x22, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // L4 (VCOM)
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     // TP/RP groups (global timing)
-    0x01, 0x01, 0x01, 0x01, 0x00,  // G0
-    0x01, 0x01, 0x01, 0x01, 0x00,  // G1
-    0x01, 0x01, 0x01, 0x01, 0x00,  // G2
-    0x00, 0x00, 0x00, 0x00, 0x00,  // G3
-    0x00, 0x00, 0x00, 0x00, 0x00,  // G4
-    0x00, 0x00, 0x00, 0x00, 0x00,  // G5
-    0x00, 0x00, 0x00, 0x00, 0x00,  // G6
-    0x00, 0x00, 0x00, 0x00, 0x00,  // G7
-    0x00, 0x00, 0x00, 0x00, 0x00,  // G8
-    0x00, 0x00, 0x00, 0x00, 0x00,  // G9
+    0x01, 0x01, 0x01, 0x01, 0x00, // G0
+    0x01, 0x01, 0x01, 0x01, 0x00, // G1
+    0x01, 0x01, 0x01, 0x01, 0x00, // G2
+    0x00, 0x00, 0x00, 0x00, 0x00, // G3
+    0x00, 0x00, 0x00, 0x00, 0x00, // G4
+    0x00, 0x00, 0x00, 0x00, 0x00, // G5
+    0x00, 0x00, 0x00, 0x00, 0x00, // G6
+    0x00, 0x00, 0x00, 0x00, 0x00, // G7
+    0x00, 0x00, 0x00, 0x00, 0x00, // G8
+    0x00, 0x00, 0x00, 0x00, 0x00, // G9
     // Frame rate
-    0x8F, 0x8F, 0x8F, 0x8F, 0x8F,
-    // Voltages (VGH, VSH1, VSH2, VSL, VCOM)
-    0x17, 0x41, 0xA8, 0x32, 0x30,
-    // Reserved
+    0x8F, 0x8F, 0x8F, 0x8F, 0x8F, // Voltages (VGH, VSH1, VSH2, VSL, VCOM)
+    0x17, 0x41, 0xA8, 0x32, 0x30, // Reserved
     0x00, 0x00,
 ];
 
 const LUT_GRAYSCALE_REVERT: &[u8] = &[
     // 00 black/white
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 10 gray
+    0x54, 0x54, 0x54, 0x54, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 01 light gray
+    0xA8, 0xA8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 11 dark gray
+    0xFC, 0xFC, 0xFC, 0xFC, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // L4 (VCOM)
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    // 10 gray
-    0x54, 0x54, 0x54, 0x54, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    // 01 light gray
-    0xA8, 0xA8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    // 11 dark gray
-    0xFC, 0xFC, 0xFC, 0xFC, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    // L4 (VCOM)
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-
     // TP/RP groups (global timing)
-    0x01, 0x01, 0x01, 0x01, 0x01,  // G0: A=1 B=1 C=1 D=1 RP=0 (4 frames)
-    0x01, 0x01, 0x01, 0x01, 0x01,  // G1: A=1 B=1 C=1 D=1 RP=0 (4 frames)
-    0x01, 0x01, 0x01, 0x01, 0x00,  // G2: A=0 B=0 C=0 D=0 RP=0 (4 frames)
-    0x01, 0x01, 0x01, 0x01, 0x00,  // G3: A=0 B=0 C=0 D=0 RP=0
-    0x00, 0x00, 0x00, 0x00, 0x00,  // G4: A=0 B=0 C=0 D=0 RP=0
-    0x00, 0x00, 0x00, 0x00, 0x00,  // G5: A=0 B=0 C=0 D=0 RP=0
-    0x00, 0x00, 0x00, 0x00, 0x00,  // G6: A=0 B=0 C=0 D=0 RP=0
-    0x00, 0x00, 0x00, 0x00, 0x00,  // G7: A=0 B=0 C=0 D=0 RP=0
-    0x00, 0x00, 0x00, 0x00, 0x00,  // G8: A=0 B=0 C=0 D=0 RP=0
-    0x00, 0x00, 0x00, 0x00, 0x00,  // G9: A=0 B=0 C=0 D=0 RP=0
-
+    0x01, 0x01, 0x01, 0x01, 0x01, // G0: A=1 B=1 C=1 D=1 RP=0 (4 frames)
+    0x01, 0x01, 0x01, 0x01, 0x01, // G1: A=1 B=1 C=1 D=1 RP=0 (4 frames)
+    0x01, 0x01, 0x01, 0x01, 0x00, // G2: A=0 B=0 C=0 D=0 RP=0 (4 frames)
+    0x01, 0x01, 0x01, 0x01, 0x00, // G3: A=0 B=0 C=0 D=0 RP=0
+    0x00, 0x00, 0x00, 0x00, 0x00, // G4: A=0 B=0 C=0 D=0 RP=0
+    0x00, 0x00, 0x00, 0x00, 0x00, // G5: A=0 B=0 C=0 D=0 RP=0
+    0x00, 0x00, 0x00, 0x00, 0x00, // G6: A=0 B=0 C=0 D=0 RP=0
+    0x00, 0x00, 0x00, 0x00, 0x00, // G7: A=0 B=0 C=0 D=0 RP=0
+    0x00, 0x00, 0x00, 0x00, 0x00, // G8: A=0 B=0 C=0 D=0 RP=0
+    0x00, 0x00, 0x00, 0x00, 0x00, // G9: A=0 B=0 C=0 D=0 RP=0
     // Frame rate
-    0x8F, 0x8F, 0x8F, 0x8F, 0x8F,
-
-    // Voltages (VGH, VSH1, VSH2, VSL, VCOM)
-    0x17, 0x41, 0xA8, 0x32, 0x30,
-
-    // Reserved
-    0x00, 0x00
+    0x8F, 0x8F, 0x8F, 0x8F, 0x8F, // Voltages (VGH, VSH1, VSH2, VSL, VCOM)
+    0x17, 0x41, 0xA8, 0x32, 0x30, // Reserved
+    0x00, 0x00,
 ];
 
 /// E-Ink Display driver for SSD1677
-pub struct EInkDisplay<SPI, CS, DC, RST, BUSY>
-where
-    SPI: embedded_hal::spi::SpiBus,
-    CS: OutputPin,
-    DC: OutputPin,
-    RST: OutputPin,
-    BUSY: InputPin,
-{
-    spi: SPI,
-    cs: CS,
-    dc: DC,
-    rst: RST,
-    busy: BUSY,
+pub struct EInkDisplay<'gpio> {
+    spi: Spi<'gpio, Blocking>,
+    cs: Output<'gpio>,
+    dc: Output<'gpio>,
+    rst: Output<'gpio>,
+    busy: Input<'gpio>,
     delay: Delay,
     is_screen_on: bool,
     custom_lut_active: bool,
     in_grayscale_mode: bool,
 }
 
-impl<SPI, CS, DC, RST, BUSY> EInkDisplay<SPI, CS, DC, RST, BUSY>
-where
-    SPI: embedded_hal::spi::SpiBus,
-    CS: OutputPin,
-    DC: OutputPin,
-    RST: OutputPin,
-    BUSY: InputPin,
-{
+impl<'gpio> EInkDisplay<'gpio> {
     /// Display dimensions
     pub const WIDTH: usize = 800;
     pub const HEIGHT: usize = 480;
@@ -156,14 +135,14 @@ where
 
     /// Create a new EInkDisplay instance
     pub fn new(
-        spi: SPI,
-        cs: CS,
-        dc: DC,
-        rst: RST,
-        busy: BUSY,
+        spi: Spi<'gpio, Blocking>,
+        cs: Output<'gpio>,
+        dc: Output<'gpio>,
+        rst: Output<'gpio>,
+        busy: Input<'gpio>,
         delay: Delay,
-    ) -> Result<Self, &'static str> {
-        Ok(Self {
+    ) -> Self {
+        Self {
             spi,
             cs,
             dc,
@@ -173,11 +152,11 @@ where
             is_screen_on: false,
             custom_lut_active: false,
             in_grayscale_mode: false,
-        })
+        }
     }
 
     /// Initialize the display
-    pub fn begin(&mut self) -> Result<(), &'static str> {
+    pub fn begin(&mut self) -> Result<(), SpiError> {
         info!("Initializing E-Ink Display");
 
         // Reset display
@@ -190,7 +169,7 @@ where
         Ok(())
     }
 
-    pub fn display_gray_buffer(&mut self, turn_off_screen: bool) -> Result<(), &'static str> {
+    pub fn display_gray_buffer(&mut self, turn_off_screen: bool) -> Result<(), SpiError> {
         warn!("Displaying grayscale buffer");
         self.in_grayscale_mode = true;
         self.set_custom_lut(LUT_GRAYSCALE)?;
@@ -199,7 +178,7 @@ where
         Ok(())
     }
 
-    fn grayscale_revert_internal(&mut self) -> Result<(), &'static str> {
+    fn grayscale_revert_internal(&mut self) -> Result<(), SpiError> {
         warn!("Reverting grayscale buffer");
         self.in_grayscale_mode = false;
         self.set_custom_lut(LUT_GRAYSCALE_REVERT)?;
@@ -208,7 +187,7 @@ where
         Ok(())
     }
 
-    fn set_custom_lut(&mut self, lut: &[u8]) -> Result<(), &'static str> {
+    fn set_custom_lut(&mut self, lut: &[u8]) -> Result<(), SpiError> {
         info!("Setting custom LUT");
 
         self.send_command(commands::WRITE_LUT)?;
@@ -228,7 +207,7 @@ where
     }
 
     /// Enter deep sleep mode
-    pub fn deep_sleep(&mut self) -> Result<(), &'static str> {
+    pub fn deep_sleep(&mut self) -> Result<(), SpiError> {
         info!("Entering deep sleep mode");
         self.send_command(commands::DEEP_SLEEP)?;
         self.send_data(&[0x01])?;
@@ -250,27 +229,27 @@ where
         info!("Display reset complete");
     }
 
-    fn send_command(&mut self, command: u8) -> Result<(), &'static str> {
+    fn send_command(&mut self, command: u8) -> Result<(), SpiError> {
         let _ = self.dc.set_low(); // Command mode
         let _ = self.cs.set_low();
-        self.spi.write(&[command]).map_err(|_| "SPI write failed")?;
-        self.spi.flush().map_err(|_| "SPI flush failed")?;
+        self.spi.write(&[command])?;
+        self.spi.flush()?;
         let _ = self.cs.set_high();
         Ok(())
     }
 
-    fn send_data(&mut self, data: &[u8]) -> Result<(), &'static str> {
+    fn send_data(&mut self, data: &[u8]) -> Result<(), SpiError> {
         let _ = self.dc.set_high(); // Data mode
         let _ = self.cs.set_low();
-        self.spi.write(data).map_err(|_| "SPI write failed")?;
-        self.spi.flush().map_err(|_| "SPI flush failed")?;
+        self.spi.write(data)?;
+        self.spi.flush()?;
         let _ = self.cs.set_high();
         Ok(())
     }
 
     fn wait_while_busy(&mut self, comment: &str) {
         let mut iterations = 0u32;
-        while self.busy.is_high().unwrap_or(false) {
+        while self.busy.is_high() {
             self.delay.delay_millis(1);
             iterations += 1;
             if iterations > 10000 {
@@ -281,7 +260,7 @@ where
         info!("Wait complete: {} ({} ms)", comment, iterations);
     }
 
-    fn init_display_controller(&mut self) -> Result<(), &'static str> {
+    fn init_display_controller(&mut self) -> Result<(), SpiError> {
         info!("Initializing SSD1677 controller");
 
         // Soft reset
@@ -300,9 +279,9 @@ where
         let height: u16 = 480;
         self.send_command(commands::DRIVER_OUTPUT_CONTROL)?;
         self.send_data(&[
-            ((height - 1) % 256) as u8,  // gates A0..A7 (low byte)
-            ((height - 1) / 256) as u8,  // gates A8..A9 (high byte)
-            0x02,                         // SM=1 (interlaced), TB=0
+            ((height - 1) % 256) as u8, // gates A0..A7 (low byte)
+            ((height - 1) / 256) as u8, // gates A8..A9 (high byte)
+            0x02,                       // SM=1 (interlaced), TB=0
         ])?;
 
         // Border waveform control
@@ -326,7 +305,7 @@ where
         Ok(())
     }
 
-    fn set_ram_area(&mut self, x: u16, y: u16, w: u16, h: u16) -> Result<(), &'static str> {
+    fn set_ram_area(&mut self, x: u16, y: u16, w: u16, h: u16) -> Result<(), SpiError> {
         // Reverse Y coordinate (gates are reversed on this display)
         let y = Self::HEIGHT as u16 - y - h;
 
@@ -337,44 +316,52 @@ where
         // Set RAM X address range (start, end) - X is in PIXELS
         self.send_command(commands::SET_RAM_X_RANGE)?;
         self.send_data(&[
-            (x % 256) as u8,            // start low byte
-            (x / 256) as u8,            // start high byte
-            ((x + w - 1) % 256) as u8,  // end low byte
-            ((x + w - 1) / 256) as u8,  // end high byte
+            (x % 256) as u8,           // start low byte
+            (x / 256) as u8,           // start high byte
+            ((x + w - 1) % 256) as u8, // end low byte
+            ((x + w - 1) / 256) as u8, // end high byte
         ])?;
 
         // Set RAM Y address range (start, end) - Y is in PIXELS
         self.send_command(commands::SET_RAM_Y_RANGE)?;
         self.send_data(&[
-            ((y + h - 1) % 256) as u8,  // start low byte
-            ((y + h - 1) / 256) as u8,  // start high byte
-            (y % 256) as u8,            // end low byte
-            (y / 256) as u8,            // end high byte
+            ((y + h - 1) % 256) as u8, // start low byte
+            ((y + h - 1) / 256) as u8, // start high byte
+            (y % 256) as u8,           // end low byte
+            (y / 256) as u8,           // end high byte
         ])?;
 
         // Set RAM X address counter - X is in PIXELS
         self.send_command(commands::SET_RAM_X_COUNTER)?;
         self.send_data(&[
-            (x % 256) as u8,  // low byte
-            (x / 256) as u8,  // high byte
+            (x % 256) as u8, // low byte
+            (x / 256) as u8, // high byte
         ])?;
 
         // Set RAM Y address counter - Y is in PIXELS
         self.send_command(commands::SET_RAM_Y_COUNTER)?;
         self.send_data(&[
-            ((y + h - 1) % 256) as u8,  // low byte
-            ((y + h - 1) / 256) as u8,  // high byte
+            ((y + h - 1) % 256) as u8, // low byte
+            ((y + h - 1) / 256) as u8, // high byte
         ])?;
 
         Ok(())
     }
 
-    fn write_ram_buffer(&mut self, ram_buffer: u8, data: &[u8]) -> Result<(), &'static str> {
-        let buffer_name = if ram_buffer == commands::WRITE_RAM_BW { "BW" } else { "RED" };
-        info!("Writing frame buffer to {} RAM ({} bytes)", buffer_name, data.len());
+    fn write_ram_buffer(&mut self, ram_buffer: u8, data: &[u8]) -> Result<(), SpiError> {
+        let buffer_name = if ram_buffer == commands::WRITE_RAM_BW {
+            "BW"
+        } else {
+            "RED"
+        };
+        info!(
+            "Writing frame buffer to {} RAM ({} bytes)",
+            buffer_name,
+            data.len()
+        );
 
         self.send_command(ram_buffer)?;
-        
+
         // Write data in chunks to avoid issues with large transfers
         const CHUNK_SIZE: usize = 4096;
         for chunk in data.chunks(CHUNK_SIZE) {
@@ -385,7 +372,11 @@ where
         Ok(())
     }
 
-    fn refresh_display(&mut self, mode: RefreshMode, turn_off_screen: bool) -> Result<(), &'static str> {
+    fn refresh_display(
+        &mut self,
+        mode: RefreshMode,
+        turn_off_screen: bool,
+    ) -> Result<(), SpiError> {
         // Configure Display Update Control 1
         self.send_command(commands::DISPLAY_UPDATE_CTRL1)?;
         let ctrl1 = match mode {
@@ -400,13 +391,13 @@ where
         // Enable counter and analog if not already on
         if !self.is_screen_on {
             self.is_screen_on = true;
-            display_mode |= 0xC0;  // Set CLOCK_ON and ANALOG_ON bits
+            display_mode |= 0xC0; // Set CLOCK_ON and ANALOG_ON bits
         }
 
         // Turn off screen if requested
         if turn_off_screen {
             self.is_screen_on = false;
-            display_mode |= 0x03;  // Set ANALOG_OFF_PHASE and CLOCK_OFF bits
+            display_mode |= 0x03; // Set ANALOG_OFF_PHASE and CLOCK_OFF bits
         }
 
         match mode {
@@ -430,8 +421,11 @@ where
             RefreshMode::Half => "half",
             RefreshMode::Fast => "fast",
         };
-        info!("Powering on display 0x{:02X} ({} refresh)", display_mode, refresh_type);
-        
+        info!(
+            "Powering on display 0x{:02X} ({} refresh)",
+            display_mode, refresh_type
+        );
+
         self.send_command(commands::DISPLAY_UPDATE_CTRL2)?;
         self.send_data(&[display_mode])?;
 
@@ -445,14 +439,7 @@ where
     }
 }
 
-impl<SPI, CS, DC, RST, BUSY> Display
-for EInkDisplay<SPI, CS, DC, RST, BUSY>
-where
-    SPI: embedded_hal::spi::SpiBus,
-    CS: OutputPin,
-    DC: OutputPin,
-    RST: OutputPin,
-    BUSY: InputPin,{
+impl Display for EInkDisplay<'_> {
     fn display(&mut self, buffers: &mut DisplayBuffers, mut mode: RefreshMode) {
         if !self.is_screen_on {
             // Force half refresh if screen is off
@@ -461,8 +448,7 @@ where
 
         // If currently in grayscale mode, revert first to black/white
         if self.in_grayscale_mode {
-            self.grayscale_revert_internal()
-                .unwrap();
+            self.grayscale_revert_internal().unwrap();
         }
 
         // Set up full screen RAM area
@@ -476,13 +462,17 @@ where
         match mode {
             RefreshMode::Full | RefreshMode::Half => {
                 // For full refresh, write current buffer to both RAM buffers
-                self.write_ram_buffer(commands::WRITE_RAM_BW, current).unwrap();
-                self.write_ram_buffer(commands::WRITE_RAM_RED, current).unwrap();
+                self.write_ram_buffer(commands::WRITE_RAM_BW, current)
+                    .unwrap();
+                self.write_ram_buffer(commands::WRITE_RAM_RED, current)
+                    .unwrap();
             }
             RefreshMode::Fast => {
                 // For fast refresh, write current to BW and previous to RED
-                self.write_ram_buffer(commands::WRITE_RAM_BW, current).unwrap();
-                self.write_ram_buffer(commands::WRITE_RAM_RED, previous).unwrap();
+                self.write_ram_buffer(commands::WRITE_RAM_BW, current)
+                    .unwrap();
+                self.write_ram_buffer(commands::WRITE_RAM_RED, previous)
+                    .unwrap();
             }
         }
 
@@ -490,8 +480,7 @@ where
         buffers.swap_buffers();
 
         // Refresh the display
-        self.refresh_display(mode, false)
-            .unwrap();
+        self.refresh_display(mode, false).unwrap();
     }
 
     fn copy_to_lsb(&mut self, buffers: &[u8; BUFFER_SIZE]) {
@@ -509,13 +498,13 @@ where
     }
 
     fn copy_grayscale_buffers(&mut self, lsb: &[u8; BUFFER_SIZE], msb: &[u8; BUFFER_SIZE]) {
-        self.set_ram_area(0, 0, Self::WIDTH as u16, Self::HEIGHT as u16).unwrap();
+        self.set_ram_area(0, 0, Self::WIDTH as u16, Self::HEIGHT as u16)
+            .unwrap();
         self.write_ram_buffer(commands::WRITE_RAM_BW, lsb).unwrap();
         self.write_ram_buffer(commands::WRITE_RAM_RED, msb).unwrap();
     }
 
     fn display_grayscale(&mut self) {
-        self.display_gray_buffer(false)
-            .unwrap();
+        self.display_gray_buffer(false).unwrap();
     }
 }

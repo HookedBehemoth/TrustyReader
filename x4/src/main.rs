@@ -10,34 +10,74 @@
 pub mod eink_display;
 pub mod input;
 
-use crate::eink_display::{EInkDisplay};
+use crate::eink_display::EInkDisplay;
 use crate::input::*;
 use alloc::boxed::Box;
+use alloc::vec::Vec;
+use embassy_executor::Spawner;
+use embassy_time::{Duration, Timer};
+use esp_backtrace as _;
+use esp_hal::Async;
+use esp_hal::clock::CpuClock;
+use esp_hal::delay::Delay;
+use esp_hal::gpio::{Input, InputConfig, Level, Output, OutputConfig};
+use esp_hal::interrupt::software::SoftwareInterruptControl;
+use esp_hal::spi::Mode;
+use esp_hal::spi::master::{Config, Spi};
+use esp_hal::time::Rate;
+use esp_hal::timer::timg::TimerGroup;
+use esp_hal::usb_serial_jtag::{UsbSerialJtag, UsbSerialJtagRx};
+use log::info;
 use microreader_core::application::Application;
 use microreader_core::display::{Display, RefreshMode};
 use microreader_core::framebuffer::DisplayBuffers;
-use esp_backtrace as _;
-use esp_hal::clock::CpuClock;
-use esp_hal::main;
-use esp_hal::spi::master::{Config, Spi};
-use esp_hal::time::Rate;
-use esp_hal::delay::Delay;
-use esp_hal::gpio::{Input, InputConfig, Level, Output, OutputConfig};
-use esp_hal::spi::Mode;
-use log::info;
 
 extern crate alloc;
+const MAX_BUFFER_SIZE: usize = 512;
 
 // This creates a default app-descriptor required by the esp-idf bootloader.
 // For more information see: <https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/system/app_image_format.html#application-description>
 esp_bootloader_esp_idf::esp_app_desc!();
 
+fn handle_cmd(command: &[u8]) {
+    info!(
+        "Handling command: {}",
+        core::str::from_utf8(command).unwrap()
+    );
+}
+
+#[embassy_executor::task]
+async fn reader(mut rx: UsbSerialJtagRx<'static, Async>) {
+    let mut rbuf = [0u8; MAX_BUFFER_SIZE];
+    let mut cmd_buffer: Vec<u8> = Vec::new();
+    cmd_buffer.reserve(0x1000);
+    loop {
+        let r = embedded_io_async::Read::read(&mut rx, &mut rbuf).await;
+        match r {
+            Ok(len) => {
+                cmd_buffer.extend_from_slice(&rbuf[..len]);
+                if rbuf.contains(&b'\r') || rbuf.contains(&b'\n') {
+                    // Cut input off at first newline
+                    let idx = cmd_buffer
+                        .iter()
+                        .position(|&c| c == b'\r' || c == b'\n')
+                        .unwrap();
+                    handle_cmd(&cmd_buffer[..idx]);
+                    cmd_buffer.clear();
+                }
+            }
+            #[allow(unreachable_patterns)]
+            Err(e) => esp_println::println!("RX Error: {:?}", e),
+        }
+    }
+}
+
 #[allow(
     clippy::large_stack_frames,
     reason = "it's not unusual to allocate larger buffers etc. in main"
 )]
-#[main]
-fn main() -> ! {
+#[esp_rtos::main]
+async fn main(spawner: Spawner) {
     esp_println::logger::init_logger_from_env();
 
     let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
@@ -45,6 +85,16 @@ fn main() -> ! {
 
     esp_alloc::heap_allocator!(#[esp_hal::ram(reclaimed)] size: 0x10000);
     esp_alloc::heap_allocator!(size: 310000);
+
+    let sw_int = SoftwareInterruptControl::new(peripherals.SW_INTERRUPT);
+    let timg0 = TimerGroup::new(peripherals.TIMG0);
+    esp_rtos::start(timg0.timer0, sw_int.software_interrupt0);
+
+    let (rx, _tx) = UsbSerialJtag::new(peripherals.USB_DEVICE)
+        .into_async()
+        .split();
+
+    spawner.spawn(reader(rx)).unwrap();
 
     let stats = esp_alloc::HEAP.stats();
     info!("Heap initialized");
@@ -74,15 +124,7 @@ fn main() -> ! {
 
     // Create E-Ink Display instance
     info!("Creating E-Ink Display driver");
-    let mut display = EInkDisplay::new(
-        spi,
-        cs,
-        dc,
-        rst,
-        busy,
-        delay
-    )
-    .expect("Failed to create E-Ink Display");
+    let mut display = EInkDisplay::new(spi, cs, dc, rst, busy, delay);
 
     // Initialize the display
     display.begin().expect("Failed to initialize display");
@@ -91,12 +133,17 @@ fn main() -> ! {
     display.display(&mut *display_buffers, RefreshMode::Full);
 
     let mut application = Application::new(&mut *display_buffers);
-    let mut button_state = GpioButtonState::new(peripherals.GPIO1, peripherals.GPIO2, peripherals.GPIO3, peripherals.ADC1);
-    
+    let mut button_state = GpioButtonState::new(
+        peripherals.GPIO1,
+        peripherals.GPIO2,
+        peripherals.GPIO3,
+        peripherals.ADC1,
+    );
+
     info!("Display complete! Starting rotation demo...");
 
     loop {
-        delay.delay_millis(10);
+        Timer::after(Duration::from_millis(10)).await;
 
         button_state.update();
         let buttons = button_state.get_buttons();

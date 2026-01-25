@@ -23,3 +23,9 @@ embedded-graphics.workspace = true
 embedded-hal = "1.0.0"
 embedded-hal-bus = "0.3.0"
 nb = "1.1.0"
+embassy-executor = "0.9.1"
+embassy-sync = "0.7.2"
+embedded-io-async = { version = "0.7.0", features = ["alloc"] }
+esp-rtos = { version = "0.2.0", features = ["alloc", "embassy", "esp-radio", "esp32c3", "log-04"] }
+static_cell = "2.1.1"
+embassy-time = "0.5.0"
