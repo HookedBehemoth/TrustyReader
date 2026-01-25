@@ -1,7 +1,6 @@
 use trusty_core::{
     application::Application,
-    display::{HEIGHT, WIDTH},
-    framebuffer::DisplayBuffers,
+    framebuffer::{DisplayBuffers, HEIGHT, WIDTH},
 };
 
 use crate::display::MinifbDisplay;

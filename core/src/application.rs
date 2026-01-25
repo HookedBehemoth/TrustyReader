@@ -8,8 +8,8 @@ use embedded_graphics::{
 };
 
 use crate::{
-    display::RefreshMode,
-    framebuffer::{DisplayBuffers, Rotation},
+    display::{GrayscaleMode, RefreshMode},
+    framebuffer::{BUFFER_SIZE, DisplayBuffers, Rotation},
     input, test_image,
 };
 
@@ -20,12 +20,14 @@ pub struct Application<'a> {
     full_refresh: bool,
 }
 
+static XTH_DATA: &[u8] = include_bytes!("page_1.xth");
+
 impl<'a> Application<'a> {
     pub fn new(display_buffers: &'a mut DisplayBuffers) -> Self {
         Application {
             dirty: true,
             display_buffers,
-            screen: 0,
+            screen: 3,
             full_refresh: true,
         }
     }
@@ -51,10 +53,10 @@ impl<'a> Application<'a> {
                 });
             self.dirty = true;
         } else if buttons.is_pressed(input::Buttons::Up) {
-            self.screen = self.screen.wrapping_sub(1) % 3;
+            self.screen = if self.screen == 0 {4} else { self.screen - 1 };
             self.dirty = true;
         } else if buttons.is_pressed(input::Buttons::Down) {
-            self.screen = (self.screen + 1) % 3;
+            self.screen = if self.screen == 4 {0} else { self.screen + 1 };
             self.dirty = true;
         } else if buttons.is_pressed(input::Buttons::Back) {
             self.full_refresh = !self.full_refresh;
@@ -73,6 +75,8 @@ impl<'a> Application<'a> {
             0 => self.draw_shapes(display),
             1 => self.draw_image(display),
             2 => self.draw_grayscale(display),
+            3 => self.draw_xth(display, GrayscaleMode::Standard),
+            4 => self.draw_xth(display, GrayscaleMode::Fast),
             _ => unreachable!(),
         }
         self.full_refresh = false;
@@ -82,9 +86,16 @@ impl<'a> Application<'a> {
         self.display_buffers
             .get_active_buffer_mut()
             .copy_from_slice(&test_image::TEST_IMAGE);
-        display.display(self.display_buffers, if self.full_refresh { RefreshMode::Full } else { RefreshMode::Fast });
+        display.display(
+            self.display_buffers,
+            if self.full_refresh {
+                RefreshMode::Full
+            } else {
+                RefreshMode::Fast
+            },
+        );
         display.copy_grayscale_buffers(&test_image::TEST_IMAGE_LSB, &test_image::TEST_IMAGE_MSB);
-        display.display_grayscale();
+        display.display_differential_grayscale();
     }
 
     pub fn draw_shapes(&mut self, display: &mut impl crate::display::Display) {
@@ -117,7 +128,14 @@ impl<'a> Application<'a> {
             .draw(self.display_buffers)
             .ok();
 
-        display.display(self.display_buffers, if self.full_refresh { RefreshMode::Full } else { RefreshMode::Fast });
+        display.display(
+            self.display_buffers,
+            if self.full_refresh {
+                RefreshMode::Full
+            } else {
+                RefreshMode::Fast
+            },
+        );
     }
 
     fn draw_grayscale(&mut self, display: &mut impl crate::display::Display) {
@@ -139,7 +157,14 @@ impl<'a> Application<'a> {
             .draw(self.display_buffers)
             .ok();
 
-        display.display(self.display_buffers, if self.full_refresh { RefreshMode::Full } else { RefreshMode::Fast });
+        display.display(
+            self.display_buffers,
+            if self.full_refresh {
+                RefreshMode::Full
+            } else {
+                RefreshMode::Fast
+            },
+        );
 
         self.display_buffers.clear(BinaryColor::Off).ok();
 
@@ -172,6 +197,13 @@ impl<'a> Application<'a> {
             .ok();
 
         display.copy_to_lsb(self.display_buffers.get_active_buffer());
-        display.display_grayscale();
+        display.display_differential_grayscale();
+    }
+
+    fn draw_xth(&mut self, display: &mut impl crate::display::Display, mode: GrayscaleMode) {
+        let lsb = &XTH_DATA[0x16..(0x16 + BUFFER_SIZE)];
+        let msb = &XTH_DATA[(0x16 + BUFFER_SIZE)..(0x16 + 2 * BUFFER_SIZE)];
+        display.copy_grayscale_buffers(lsb.try_into().unwrap(), msb.try_into().unwrap());
+        display.display_absolute_grayscale(mode);
     }
 }
