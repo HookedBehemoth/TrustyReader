@@ -30,14 +30,14 @@ pub struct DisplayBuffers {
 impl Default for DisplayBuffers {
     fn default() -> Self {
         // Clear screen to white
-        let mut framebuffer = [[0; BUFFER_SIZE]; 2];
-        framebuffer[0].fill(0xFF);
-        framebuffer[1].fill(0xFF);
-        Self {
-            framebuffer,
+        let mut ret = Self {
+            framebuffer: [[0; BUFFER_SIZE]; 2],
             active: false,
             rotation: Rotation::Rotate0,
-        }
+        };
+        ret.framebuffer[0].fill(0xFF);
+        ret.framebuffer[1].fill(0xFF);
+        ret
     }
 }
 
