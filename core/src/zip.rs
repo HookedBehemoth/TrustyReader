@@ -1,10 +1,9 @@
 use alloc::{boxed::Box, string::String, vec, vec::Vec};
+use embedded_io::SeekFrom;
 use miniz_oxide::{
     DataFormat, MZFlush,
     inflate::{self, TINFLStatus},
 };
-
-use crate::io;
 
 pub struct ZipFileEntry {
     pub name: String,
@@ -12,9 +11,9 @@ pub struct ZipFileEntry {
     offset: u32,
 }
 
-pub fn parse_zip<Reader: io::Read + io::Stream>(
+pub fn parse_zip<Reader: crate::fs::File>(
     reader: &mut Reader,
-) -> Result<Box<[ZipFileEntry]>, ()> {
+) -> Result<Box<[ZipFileEntry]>, ZipError> {
     let end_dir = find_end_central_directory(reader)?;
     read_central_directory(reader, &end_dir)
 }
@@ -67,9 +66,9 @@ struct LocalFileHeader {
     extra_len: u16,
 }
 
-fn find_end_central_directory<Reader: io::Read + io::Stream>(
+fn find_end_central_directory<Reader: crate::fs::File>(
     reader: &mut Reader,
-) -> Result<EndCentralDir, ()> {
+) -> Result<EndCentralDir, ZipError> {
     let mut buf = [0u8; 1024];
 
     let file_size = reader.size();
@@ -78,11 +77,13 @@ fn find_end_central_directory<Reader: io::Read + io::Stream>(
     } else {
         0
     };
-    reader.seek(seek_start)?;
-    let read = reader.read(&mut buf)?;
+    reader
+        .seek(SeekFrom::Start(seek_start as u64))
+        .map_err(|_| ZipError::IoError)?;
+    let read = reader.read(&mut buf).map_err(|_| ZipError::IoError)?;
 
     for i in (0..read - 4).rev() {
-        if &buf[i..i + 4] != &[0x50, 0x4b, 0x05, 0x06] {
+        if buf[i..i + 4] != [0x50, 0x4b, 0x05, 0x06] {
             continue;
         }
         unsafe {
@@ -96,34 +97,39 @@ fn find_end_central_directory<Reader: io::Read + io::Stream>(
         }
     }
 
-    Err(())
+    Err(ZipError::InvalidData)
 }
 
-fn read_central_directory<Reader: io::Read + io::Stream>(
+fn read_central_directory<Reader: crate::fs::File>(
     reader: &mut Reader,
     dir: &EndCentralDir,
-) -> Result<Box<[ZipFileEntry]>, ()> {
+) -> Result<Box<[ZipFileEntry]>, ZipError> {
     let entry_count = dir.total_num_entries as usize;
     if entry_count == 0 {
-        return Err(());
+        return Err(ZipError::InvalidData);
     }
 
     let mut entries = Vec::with_capacity(entry_count);
-    reader.seek(dir.central_dir_offset as usize)?;
+    reader
+        .seek(SeekFrom::Start(dir.central_dir_offset as u64))
+        .map_err(|_| ZipError::IoError)?;
     for _ in 0..entry_count {
-        let cde: CentralDirEntry = unsafe { reader.read_sized()? };
+        let cde: CentralDirEntry = unsafe { reader.read_sized().map_err(|_| ZipError::IoError)? };
         if cde.signature != 0x02014b50 {
-            return Err(());
+            return Err(ZipError::InvalidSignature);
         }
 
         let mut name_buf = vec![0u8; cde.filename_len as usize];
-        reader.read(&mut name_buf)?;
+        reader.read(&mut name_buf).map_err(|_| ZipError::IoError)?;
 
         // Skip extra and comment
-        reader.skip(cde.extra_len as usize)?;
-        reader.skip(cde.comment_len as usize)?;
-
-        let name = String::from_utf8(name_buf).map_err(|_| ())?;
+        reader
+            .seek(SeekFrom::Current(cde.extra_len as _))
+            .map_err(|_| ZipError::IoError)?;
+        reader
+            .seek(SeekFrom::Current(cde.comment_len as _))
+            .map_err(|_| ZipError::IoError)?;
+        let name = String::from_utf8(name_buf).map_err(|_| ZipError::InvalidData)?;
         let entry = ZipFileEntry {
             name,
             size: cde.uncompressed_size,
@@ -142,12 +148,24 @@ pub enum ZipError {
     InvalidSignature,
     UnsupportedCompression,
     DecompressionError,
-    BufferTooSmall,
+    InvalidData,
+}
+
+impl core::fmt::Display for ZipError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            ZipError::IoError => write!(f, "I/O error occurred"),
+            ZipError::InvalidSignature => write!(f, "Invalid zip signature"),
+            ZipError::UnsupportedCompression => write!(f, "Unsupported compression method"),
+            ZipError::DecompressionError => write!(f, "Error during decompression"),
+            ZipError::InvalidData => write!(f, "Invalid zip data"),
+        }
+    }
 }
 
 /// A streaming reader for a single zip entry.
 /// Supports both stored (uncompressed) and deflate-compressed entries.
-pub struct ZipEntryReader<'a, R: io::Read> {
+pub struct ZipEntryReader<'a, R: crate::fs::File> {
     reader: &'a mut R,
     compression: u16,
     compressed_remaining: usize,
@@ -161,12 +179,12 @@ pub struct ZipEntryReader<'a, R: io::Read> {
     finished: bool,
 }
 
-impl<'a, R: io::Read + io::Stream> ZipEntryReader<'a, R> {
+impl<'a, R: crate::fs::File> ZipEntryReader<'a, R> {
     /// Create a new streaming reader for a zip entry.
     /// This seeks to the entry's data and prepares for reading.
     pub fn new(reader: &'a mut R, entry: &ZipFileEntry) -> Result<Self, ZipError> {
         reader
-            .seek(entry.offset as usize)
+            .seek(SeekFrom::Start(entry.offset as u64))
             .map_err(|_| ZipError::IoError)?;
 
         // Read local file header
@@ -178,10 +196,10 @@ impl<'a, R: io::Read + io::Stream> ZipEntryReader<'a, R> {
 
         // Skip filename and extra field
         reader
-            .skip(lfh.filename_len as usize)
+            .seek(SeekFrom::Current(lfh.filename_len as _))
             .map_err(|_| ZipError::IoError)?;
         reader
-            .skip(lfh.extra_len as usize)
+            .seek(SeekFrom::Current(lfh.extra_len as _))
             .map_err(|_| ZipError::IoError)?;
 
         let compression = lfh.compression;
@@ -338,14 +356,8 @@ impl<'a, R: io::Read + io::Stream> ZipEntryReader<'a, R> {
     }
 }
 
-impl<Reader: io::Read + io::Stream> io::Read for ZipEntryReader<'_, Reader> {
-    fn read(&mut self, buf: &mut [u8]) -> core::result::Result<usize, ()> {
-        self.read(buf).map_err(|_| ())
-    }
-}
-
 /// Convenience function to read an entire zip entry into a Vec
-pub fn read_entry<Reader: io::Read + io::Stream>(
+pub fn read_entry<Reader: crate::fs::File>(
     reader: &mut Reader,
     entry: &ZipFileEntry,
 ) -> Result<Vec<u8>, ZipError> {

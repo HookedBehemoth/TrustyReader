@@ -66,15 +66,10 @@ impl MinifbDisplay {
             scale,
             ..minifb::WindowOptions::default()
         };
-        let mut window = minifb::Window::new(
-            "Trusty Desktop",
-            width,
-            height,
-            options,
-        )
-        .unwrap_or_else(|e| {
-            panic!("Unable to open window: {}", e);
-        });
+        let mut window = minifb::Window::new("Trusty Desktop", width, height, options)
+            .unwrap_or_else(|e| {
+                panic!("Unable to open window: {}", e);
+            });
 
         window.set_target_fps(5);
         window
@@ -102,9 +97,7 @@ impl MinifbDisplay {
                 let y = fb_idx / WIDTH;
                 (x * HEIGHT) + (HEIGHT - y - 1)
             }
-            Rotation::Rotate180 => {
-                WIDTH * HEIGHT - fb_idx - 1
-            }
+            Rotation::Rotate180 => WIDTH * HEIGHT - fb_idx - 1,
             Rotation::Rotate270 => {
                 let x = fb_idx % WIDTH;
                 let y = fb_idx / WIDTH;
@@ -269,10 +262,10 @@ impl MinifbDisplay {
                         let lsb_bit = (lsb_byte >> (7 - bit)) & 0x01;
                         let msb_bit = (msb_byte >> (7 - bit)) & 0x01;
                         let new_pixel = match (msb_bit, lsb_bit) {
-                            (0, 0) => 0xFFFFFFFF,       // Black
-                            (0, 1) => 0xFFAAAAAA,       // Dark Gray
-                            (1, 0) => 0xFF555555,       // Gray
-                            (1, 1) => 0xFF000000,       // White
+                            (0, 0) => 0xFFFFFFFF, // Black
+                            (0, 1) => 0xFFAAAAAA, // Dark Gray
+                            (1, 0) => 0xFF555555, // Gray
+                            (1, 1) => 0xFF000000, // White
                             _ => unreachable!(),
                         };
                         self.set_pixel(pixel_index, new_pixel);

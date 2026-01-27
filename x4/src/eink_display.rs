@@ -62,8 +62,10 @@ const DATA_ENTRY_X_INC_Y_DEC: u8 = 0x01;
 // Temperature sensor control
 const TEMP_SENSOR_INTERNAL: u8 = 0x80;
 
+#[rustfmt::skip]
+mod lut {
 /// Custom LUT for grayscale fast refresh
-static LUT_GRAYSCALE: &[u8] = &[
+pub static GRAYSCALE: &[u8] = &[
     // 00 black/white
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 01 light gray
     0x54, 0x54, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 10 gray
@@ -87,7 +89,7 @@ static LUT_GRAYSCALE: &[u8] = &[
     0x17, 0x41, 0xA8, 0x32, 0x30,
 ];
 
-static LUT_GRAYSCALE_REVERT: &[u8] = &[
+pub static GRAYSCALE_REVERT: &[u8] = &[
     // 00 black/white
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 10 gray
     0x54, 0x54, 0x54, 0x54, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 01 light gray
@@ -113,7 +115,7 @@ static LUT_GRAYSCALE_REVERT: &[u8] = &[
 
 // LUT1: Standard quality - used for XTH pages inside XTC/XTCH containers (comic reading)
 // Slower but better grayscale quality
-static LUT1_STANDARD: &[u8] = &[
+pub static XTH_STANDARD: &[u8] = &[
     // VS waveforms (5 groups x 10 bytes = 50 bytes)
     0x00, 0x4A, 0x88, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // LUT0
     0x80, 0x62, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // LUT1
@@ -139,7 +141,7 @@ static LUT1_STANDARD: &[u8] = &[
 
 // LUT2: Fast/low-power - used for standalone XTH files (wallpapers, covers)
 // ~60% faster than LUT1, slightly lower quality
-static LUT2_FAST: &[u8] = &[
+pub static XTH_FAST: &[u8] = &[
     // VS waveforms (5 groups x 10 bytes = 50 bytes) - same as LUT1
     0x00, 0x4A, 0x88, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // LUT0
     0x80, 0x62, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  // LUT1
@@ -162,6 +164,7 @@ static LUT2_FAST: &[u8] = &[
     // Voltages: VGH, VSH1, VSH2, VSL, VCOM (lower VCOM: 0x30 vs 0x50)
     0x17, 0x41, 0xA8, 0x32, 0x30,
 ];
+}
 
 /// E-Ink Display driver for SSD1677
 pub struct EInkDisplay<'gpio, SPI> {
@@ -222,7 +225,7 @@ where
     pub fn display_gray_buffer(&mut self, turn_off_screen: bool) -> Result<(), SPI::Error> {
         warn!("Displaying grayscale buffer");
         self.in_grayscale_mode = true;
-        self.set_custom_lut(LUT_GRAYSCALE)?;
+        self.set_custom_lut(lut::GRAYSCALE)?;
         self.refresh_display(RefreshMode::Fast, turn_off_screen)?;
         self.custom_lut_active = false;
         Ok(())
@@ -231,7 +234,7 @@ where
     fn grayscale_revert_internal(&mut self) -> Result<(), SPI::Error> {
         warn!("Reverting grayscale buffer");
         self.in_grayscale_mode = false;
-        self.set_custom_lut(LUT_GRAYSCALE_REVERT)?;
+        self.set_custom_lut(lut::GRAYSCALE_REVERT)?;
         self.refresh_display(RefreshMode::Fast, false)?;
         self.custom_lut_active = false;
         Ok(())
@@ -559,10 +562,10 @@ where
         info!("Displaying absolute grayscale with mode: {:?}", mode);
         match mode {
             GrayscaleMode::Standard => {
-                self.set_custom_lut(LUT1_STANDARD).unwrap();
+                self.set_custom_lut(lut::XTH_STANDARD).unwrap();
             }
             GrayscaleMode::Fast => {
-                self.set_custom_lut(LUT2_FAST).unwrap();
+                self.set_custom_lut(lut::XTH_FAST).unwrap();
             }
         }
         self.refresh_display(RefreshMode::Fast, false).unwrap();

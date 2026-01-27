@@ -1,5 +1,11 @@
-use embedded_sdmmc::{RawVolume, SdCard, VolumeManager};
-use trusty_core::{fs, io};
+use alloc::{
+    string::{String, ToString},
+    vec::Vec,
+};
+use embedded_io::{ErrorType, SeekFrom};
+use embedded_sdmmc::{LfnBuffer, RawVolume, SdCard, VolumeManager, sdcard};
+use esp_hal::delay::Delay;
+use trusty_core::fs::{DirEntry, Mode};
 
 /// Dummy time source for embedded-sdmmc (RTC requires too much power)
 pub struct DummyTimeSource;
@@ -17,139 +23,263 @@ impl embedded_sdmmc::TimeSource for DummyTimeSource {
     }
 }
 
-pub struct SdSpiFilesystem<SPI, Delay> 
+pub struct SdSpiFilesystem<SPI>
 where
     SPI: embedded_hal::spi::SpiDevice<u8>,
-    Delay: embedded_hal::delay::DelayNs,
 {
     volume_mgr: VolumeManager<SdCard<SPI, Delay>, DummyTimeSource>,
     volume: RawVolume,
 }
 
-impl<SPI, Delay> SdSpiFilesystem<SPI, Delay>
+type Error = embedded_sdmmc::Error<sdcard::Error>;
+type Result<T> = core::result::Result<T, Error>;
+
+impl<SPI> ErrorType for SdSpiFilesystem<SPI>
 where
     SPI: embedded_hal::spi::SpiDevice<u8>,
-    Delay: embedded_hal::delay::DelayNs,
 {
-    pub fn new_with_volume(spi: SPI, delay: Delay) -> fs::Result<Self> {
+    type Error = Error;
+}
+
+impl<SPI> SdSpiFilesystem<SPI>
+where
+    SPI: embedded_hal::spi::SpiDevice<u8>,
+{
+    pub fn new_with_volume(spi: SPI, delay: Delay) -> Result<Self> {
         let sdcard = SdCard::new(spi, delay);
         let volume_mgr = VolumeManager::new(sdcard, DummyTimeSource);
-        let volume = volume_mgr.open_raw_volume(embedded_sdmmc::VolumeIdx(0))
-            .map_err(|_| fs::Error::IoFailure)?;
-        Ok(SdSpiFilesystem {
-            volume_mgr,
-            volume,
-        })
+        let volume = volume_mgr.open_raw_volume(embedded_sdmmc::VolumeIdx(0))?;
+        Ok(SdSpiFilesystem { volume_mgr, volume })
     }
 
-    fn components(path: &str) -> impl Iterator<Item=&str> {
+    fn components(path: &str) -> impl Iterator<Item = &str> {
         path.split('/').filter(|s| !s.is_empty())
     }
 }
 
-impl<SPI, Delay> trusty_core::fs::Filesystem<SdSpiFile<'_, SPI, Delay>>
-for SdSpiFilesystem<SPI, Delay>
+impl<SPI> trusty_core::fs::Filesystem for SdSpiFilesystem<SPI>
 where
     SPI: embedded_hal::spi::SpiDevice<u8>,
-    Delay: embedded_hal::delay::DelayNs,
 {
-    fn create_dir_all(&mut self, path: &str) -> fs::Result<()> {
+    type File<'a>
+        = SdSpiFile<'a, SPI>
+    where
+        Self: 'a;
+    type Directory<'a>
+        = SdSpiDirectory<'a, SPI>
+    where
+        Self: 'a;
+
+    fn create_dir_all(&self, path: &str) -> Result<()> {
         let volume = self.volume.to_volume(&self.volume_mgr);
-        let mut dir = volume.open_root_dir().map_err(|_| fs::Error::IoFailure)?;
+        let mut dir = volume.open_root_dir()?;
 
         for comp in Self::components(path) {
             // Ignore error if directory already exists
             let _ = dir.make_dir_in_dir(comp);
-            dir.change_dir(comp).map_err(|_| fs::Error::IoFailure)?;
+            dir.change_dir(comp)?;
         }
 
         Ok(())
     }
 
-    fn exists(&mut self, path: &str) -> fs::Result<bool> {
+    fn exists(&self, path: &str) -> Result<bool> {
         let volume = self.volume.to_volume(&self.volume_mgr);
-        let mut dir = volume.open_root_dir().map_err(|_| fs::Error::IoFailure)?;
+        let mut dir = volume.open_root_dir()?;
         let mut components = Self::components(path).peekable();
         while let Some(comp) = components.next() {
-            let entry = match dir.find_directory_entry(comp) {
-                Ok(e) => e,
-                Err(embedded_sdmmc::Error::NotFound) => return Ok(false),
-                Err(_) => return Err(fs::Error::IoFailure),
-            };
+            let entry = dir.find_directory_entry(comp)?;
             if !entry.attributes.is_directory() {
                 return Ok(components.peek().is_none());
             }
             if components.peek().is_some() {
-                dir.change_dir(entry.name).map_err(|_| fs::Error::IoFailure)?;
+                dir.change_dir(entry.name)?;
             }
         }
         Ok(true)
     }
 
-    fn open(&mut self, path: &str) -> fs::Result<SdSpiFile<'_, SPI, Delay>> {
+    fn open_file(&self, path: &str, mode: Mode) -> Result<Self::File<'_>> {
         let volume = self.volume.to_volume(&self.volume_mgr);
-        let mut dir = volume.open_root_dir().map_err(|_| fs::Error::IoFailure)?;
+        let mut dir = volume.open_root_dir()?;
         let mut components = Self::components(path).peekable();
         while let Some(comp) = components.next() {
-            let entry = match dir.find_directory_entry(comp) {
-                Ok(e) => e,
-                Err(embedded_sdmmc::Error::NotFound) => return Err(fs::Error::NotFound),
-                Err(_) => return Err(fs::Error::IoFailure),
-            };
+            let entry = dir.find_directory_entry(comp)?;
             if !entry.attributes.is_directory() {
                 if components.peek().is_some() {
-                    return Err(fs::Error::NotFound);
+                    return Err(Error::NotFound);
                 }
                 let size = entry.size;
-                let file = dir.open_file_in_dir(
-                    entry.name, embedded_sdmmc::Mode::ReadOnly)
-                    .map_err(|_| fs::Error::IoFailure)?;
+                let mode = match mode {
+                    Mode::Read => embedded_sdmmc::Mode::ReadOnly,
+                    Mode::Write => embedded_sdmmc::Mode::ReadWriteCreateOrTruncate,
+                    Mode::ReadWrite => embedded_sdmmc::Mode::ReadWriteAppend,
+                };
+                let file = dir.open_file_in_dir(entry.name, mode)?;
+                // juggle ownership away from local dir & volume
+                let raw_file = file.to_raw_file();
                 return Ok(SdSpiFile {
-                    file,
+                    file: embedded_sdmmc::File::new(raw_file, &self.volume_mgr),
                     size,
                 });
             }
             if components.peek().is_some() {
-                dir.change_dir(entry.name).map_err(|_| fs::Error::IoFailure)?;
+                dir.change_dir(entry.name)?;
             }
         }
-        Err(fs::Error::NotFound)
+        Err(Error::NotFound)
+    }
+
+    fn open_directory(&self, path: &str) -> Result<Self::Directory<'_>> {
+        let volume = self.volume.to_volume(&self.volume_mgr);
+        let mut dir = volume.open_root_dir()?;
+        let mut components = Self::components(path);
+        while let Some(comp) = components.next() {
+            dir.change_dir(comp)?;
+        }
+        let raw_dir = dir.to_raw_directory();
+        Ok(SdSpiDirectory {
+            dir: raw_dir.to_directory(&self.volume_mgr),
+        })
+    }
+    fn open_file_entry(
+        &self,
+        dir: &Self::Directory<'_>,
+        entry: &SdSpiDirEntry,
+        mode: Mode,
+    ) -> Result<Self::File<'_>> {
+        if entry.is_directory() {
+            return Err(Error::OpenedDirAsFile);
+        }
+
+        let size = entry.size() as u32;
+        let mode = match mode {
+            Mode::Read => embedded_sdmmc::Mode::ReadOnly,
+            Mode::Write => embedded_sdmmc::Mode::ReadWriteCreateOrTruncate,
+            Mode::ReadWrite => embedded_sdmmc::Mode::ReadWriteAppend,
+        };
+        let file = dir.dir.open_file_in_dir(entry.name(), mode)?;
+        // juggle ownership away from local dir & volume
+        let raw_file = file.to_raw_file();
+        Ok(SdSpiFile {
+            file: raw_file.to_file(&self.volume_mgr),
+            size,
+        })
     }
 }
 
-struct SdSpiFile<'a, SPI, Delay>
+pub struct SdSpiFile<'a, SPI>
 where
     SPI: embedded_hal::spi::SpiDevice<u8>,
-    Delay: embedded_hal::delay::DelayNs,
 {
     file: embedded_sdmmc::File<'a, SdCard<SPI, Delay>, DummyTimeSource, 4, 4, 1>,
     size: u32,
 }
 
-impl<SPI, Delay> io::Stream
-for SdSpiFile<'_, SPI, Delay>
+impl<SPI> ErrorType for SdSpiFile<'_, SPI>
 where
     SPI: embedded_hal::spi::SpiDevice<u8>,
-    Delay: embedded_hal::delay::DelayNs,
+{
+    type Error = embedded_sdmmc::Error<sdcard::Error>;
+}
+
+impl<'a, SPI> trusty_core::fs::File for SdSpiFile<'a, SPI>
+where
+    SPI: embedded_hal::spi::SpiDevice<u8>,
 {
     fn size(&self) -> usize {
         self.size as usize
     }
+}
 
-    fn seek(&mut self, pos: usize) -> core::result::Result<(), ()> {
-        self.file
-            .seek_from_start(pos as u32)
-            .map_err(|_| ())
+impl<SPI> embedded_io::Seek for SdSpiFile<'_, SPI>
+where
+    SPI: embedded_hal::spi::SpiDevice<u8>,
+{
+    fn seek(&mut self, pos: SeekFrom) -> core::result::Result<u64, Self::Error> {
+        match pos {
+            SeekFrom::Current(off) => self.file.seek_from_current(off as _),
+            SeekFrom::End(off) => self.file.seek_from_end(off as _),
+            SeekFrom::Start(pos) => self.file.seek_from_start(pos as _),
+        }?;
+        Ok(self.file.offset() as u64)
     }
 }
 
-impl<SPI, Delay> io::Read
-for SdSpiFile<'_, SPI, Delay>
+impl<SPI> embedded_io::Read for SdSpiFile<'_, SPI>
 where
     SPI: embedded_hal::spi::SpiDevice<u8>,
-    Delay: embedded_hal::delay::DelayNs,
 {
-    fn read(&mut self, buf: &mut [u8]) -> core::result::Result<usize, ()> {
-        self.file.read(buf).map_err(|_| ())
+    fn read(&mut self, buf: &mut [u8]) -> core::result::Result<usize, Self::Error> {
+        self.file.read(buf)
+    }
+}
+
+impl<SPI> embedded_io::Write for SdSpiFile<'_, SPI>
+where
+    SPI: embedded_hal::spi::SpiDevice<u8>,
+{
+    fn write(&mut self, buf: &[u8]) -> core::result::Result<usize, Self::Error> {
+        self.file.write(buf)?;
+        Ok(buf.len())
+    }
+    fn flush(&mut self) -> core::result::Result<(), Self::Error> {
+        self.file.flush()
+    }
+}
+
+pub struct SdSpiDirectory<'a, SPI>
+where
+    SPI: embedded_hal::spi::SpiDevice<u8>,
+{
+    dir: embedded_sdmmc::Directory<'a, SdCard<SPI, Delay>, DummyTimeSource, 4, 4, 1>,
+}
+
+impl<SPI> ErrorType for SdSpiDirectory<'_, SPI>
+where
+    SPI: embedded_hal::spi::SpiDevice<u8>,
+{
+    type Error = embedded_sdmmc::Error<sdcard::Error>;
+}
+
+impl<SPI> trusty_core::fs::Directory for SdSpiDirectory<'_, SPI>
+where
+    SPI: embedded_hal::spi::SpiDevice<u8>,
+{
+    type Entry = SdSpiDirEntry;
+
+    fn list(&self) -> Result<Vec<Self::Entry>> {
+        let mut entries = Vec::new();
+        let mut buffer = [0u8; 256];
+        let mut lfn = LfnBuffer::new(&mut buffer);
+        self.dir.iterate_dir_lfn(&mut lfn, |entry, lfn| {
+            let name = lfn
+                .map(|lfn| lfn.to_string())
+                .unwrap_or(entry.name.to_string());
+            entries.push(SdSpiDirEntry {
+                entry: entry.clone(),
+                name,
+            });
+        })?;
+        Ok(entries)
+    }
+}
+
+pub struct SdSpiDirEntry {
+    pub entry: embedded_sdmmc::DirEntry,
+    pub name: String,
+}
+
+impl trusty_core::fs::DirEntry for SdSpiDirEntry {
+    fn name(&self) -> &str {
+        self.name.as_str()
+    }
+
+    fn is_directory(&self) -> bool {
+        self.entry.attributes.is_directory()
+    }
+
+    fn size(&self) -> usize {
+        self.entry.size as usize
     }
 }

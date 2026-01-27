@@ -1,17 +1,57 @@
-use crate::io;
+use core::result::Result;
 
-#[derive(Debug)]
-pub enum Error {
-    NotFound,
-    IoFailure,
-    Unknown,
+use alloc::vec::Vec;
+use embedded_io::{ErrorType, Read, Seek, Write};
+
+pub enum Mode {
+    Read,
+    Write,
+    ReadWrite,
 }
 
-pub type Result<T> = core::result::Result<T, Error>;
+pub trait Filesystem: ErrorType {
+    type File<'a>: File
+    where
+        Self: 'a;
+    type Directory<'a>: Directory
+    where
+        Self: 'a;
 
-pub trait Filesystem<File: io::Read + io::Stream> {
-    fn open(&mut self, path: &str) -> Result<File>;
-    fn exists(&mut self, path: &str) -> Result<bool>;
-    fn create_dir_all(&mut self, path: &str) -> Result<()>;
-    // fn size
+    fn open_file(&self, path: &str, mode: Mode) -> Result<Self::File<'_>, Self::Error>;
+    fn open_file_entry(
+        &self,
+        dir: &Self::Directory<'_>,
+        entry: &<<Self as Filesystem>::Directory<'_> as Directory>::Entry,
+        mode: Mode,
+    ) -> Result<Self::File<'_>, Self::Error>;
+    fn open_directory(&self, path: &str) -> Result<Self::Directory<'_>, Self::Error>;
+    fn exists(&self, path: &str) -> Result<bool, Self::Error>;
+    fn create_dir_all(&self, path: &str) -> Result<(), Self::Error>;
+}
+
+pub trait File: Read + Write + Seek {
+    fn size(&self) -> usize;
+    unsafe fn read_sized<T: Sized>(&mut self) -> core::result::Result<T, Self::Error> {
+        let mut value: T = unsafe { core::mem::zeroed() };
+        let buf = unsafe {
+            core::slice::from_raw_parts_mut(
+                &mut value as *mut T as *mut u8,
+                core::mem::size_of::<T>(),
+            )
+        };
+        self.read(buf)?;
+        Ok(value)
+    }
+}
+
+pub trait Directory: ErrorType {
+    type Entry: DirEntry;
+
+    fn list(&self) -> Result<Vec<Self::Entry>, Self::Error>;
+}
+
+pub trait DirEntry {
+    fn name(&self) -> &str;
+    fn is_directory(&self) -> bool;
+    fn size(&self) -> usize;
 }

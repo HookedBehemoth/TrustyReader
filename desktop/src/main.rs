@@ -1,8 +1,8 @@
 use trusty_core::fs::Filesystem;
-use trusty_core::{application::Application, framebuffer::DisplayBuffers, io, zip};
+use trusty_core::{application::Application, framebuffer::DisplayBuffers, zip};
 
 use crate::minifb_display::MinifbDisplay;
-use crate::std_fs::{StdFileReader, StdFilesystem};
+use crate::std_fs::StdFilesystem;
 
 mod minifb_display;
 mod std_fs;
@@ -14,7 +14,8 @@ fn main() {
 
     let mut display_buffers = Box::new(DisplayBuffers::default());
     let mut display = MinifbDisplay::default();
-    let mut application = Application::new(&mut display_buffers);
+    let fs = StdFilesystem::new_with_base_path("sd".into());
+    let mut application = Application::new(&mut display_buffers, fs);
 
     while display.is_open() {
         display.update();
@@ -22,9 +23,11 @@ fn main() {
         application.draw(&mut display);
     }
 
-    if (false) {
-        let mut fs = StdFilesystem::new_with_base_path("sd".into());
-        let mut reader = fs.open("ohler.epub").unwrap();
+    if false {
+        let fs = StdFilesystem::new_with_base_path("sd".into());
+        let mut reader = fs
+            .open_file("ohler.epub", trusty_core::fs::Mode::Read)
+            .unwrap();
         let entries = zip::parse_zip(&mut reader).unwrap();
         for entry in &entries {
             log::info!("Found zip entry: {} (sz: {})", entry.name, entry.size);

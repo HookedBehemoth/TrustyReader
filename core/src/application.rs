@@ -6,27 +6,49 @@ use embedded_graphics::{
     primitives::{Circle, PrimitiveStyle, Rectangle},
     text::Text,
 };
+use log::info;
 
 use crate::{
     display::{GrayscaleMode, RefreshMode},
     framebuffer::{BUFFER_SIZE, DisplayBuffers, Rotation},
+    fs::{DirEntry, Directory},
     input, test_image,
 };
 
-pub struct Application<'a> {
+pub struct Application<'a, Filesystem>
+where
+    Filesystem: crate::fs::Filesystem,
+{
     dirty: bool,
     display_buffers: &'a mut DisplayBuffers,
+    filesystem: Filesystem,
     screen: usize,
     full_refresh: bool,
 }
 
 static XTH_DATA: &[u8] = include_bytes!("page_1.xth");
 
-impl<'a> Application<'a> {
-    pub fn new(display_buffers: &'a mut DisplayBuffers) -> Self {
+impl<'a, Filesystem> Application<'a, Filesystem>
+where
+    Filesystem: crate::fs::Filesystem,
+{
+    pub fn new(display_buffers: &'a mut DisplayBuffers, filesystem: Filesystem) -> Self {
+        {
+            let root = filesystem.open_directory(".").unwrap();
+            let entries = root.list().unwrap();
+            for entry in &entries {
+                info!(
+                    "Found root entry: {} (sz: {}) {}",
+                    entry.name(),
+                    entry.size(),
+                    if entry.is_directory() { "<DIR>" } else { "" }
+                );
+            }
+        }
         Application {
             dirty: true,
             display_buffers,
+            filesystem,
             screen: 3,
             full_refresh: true,
         }
@@ -53,10 +75,10 @@ impl<'a> Application<'a> {
                 });
             self.dirty = true;
         } else if buttons.is_pressed(input::Buttons::Up) {
-            self.screen = if self.screen == 0 {4} else { self.screen - 1 };
+            self.screen = if self.screen == 0 { 4 } else { self.screen - 1 };
             self.dirty = true;
         } else if buttons.is_pressed(input::Buttons::Down) {
-            self.screen = if self.screen == 4 {0} else { self.screen + 1 };
+            self.screen = if self.screen == 4 { 0 } else { self.screen + 1 };
             self.dirty = true;
         } else if buttons.is_pressed(input::Buttons::Back) {
             self.full_refresh = !self.full_refresh;

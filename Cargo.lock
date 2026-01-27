@@ -1866,6 +1866,8 @@ name = "trusty-core"
 version = "0.1.0"
 dependencies = [
  "embedded-graphics",
+ "embedded-io 0.6.1",
+ "log",
  "miniz_oxide",
 ]
 
@@ -1874,6 +1876,7 @@ name = "trusty-desktop"
 version = "0.1.0"
 dependencies = [
  "embedded-graphics",
+ "embedded-io 0.6.1",
  "env_logger",
  "log",
  "minifb",
@@ -1890,6 +1893,7 @@ dependencies = [
  "embedded-graphics",
  "embedded-hal 1.0.0",
  "embedded-hal-bus",
+ "embedded-io 0.6.1",
  "embedded-io-async 0.7.0",
  "embedded-sdmmc",
  "esp-alloc",

@@ -7,21 +7,20 @@
 )]
 #![deny(clippy::large_stack_frames)]
 
-pub mod eink_display;
 pub mod adc_input;
+pub mod eink_display;
 pub mod sdspi_fs;
 
 use core::cell::RefCell;
 
-use crate::eink_display::EInkDisplay;
 use crate::adc_input::*;
+use crate::eink_display::EInkDisplay;
 use crate::sdspi_fs::SdSpiFilesystem;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use embassy_executor::Spawner;
 use embassy_time::{Duration, Timer};
 use embedded_hal_bus::spi::RefCellDevice;
-use embedded_sdmmc::{LfnBuffer, SdCard, VolumeIdx, VolumeManager};
 use esp_backtrace as _;
 use esp_hal::Async;
 use esp_hal::clock::CpuClock;
@@ -161,7 +160,6 @@ async fn main(spawner: Spawner) {
     info!("Clearing screen");
     display.display(&mut display_buffers, RefreshMode::Full);
 
-    let mut application = Application::new(&mut display_buffers);
     let mut button_state = GpioButtonState::new(
         peripherals.GPIO1,
         peripherals.GPIO2,
@@ -170,56 +168,14 @@ async fn main(spawner: Spawner) {
     );
 
     let sdcard_cs = Output::new(peripherals.GPIO12, Level::High, OutputConfig::default());
-    let sdcard_spi = RefCellDevice::new(&shared_spi, sdcard_cs, delay.clone())
+    let sdcard_spi = RefCellDevice::new(&shared_spi, sdcard_cs, delay)
         .expect("Failed to create SPI device for SD card");
 
-    let sdcard = SdCard::new(sdcard_spi, delay.clone());
-    info!("SD Card initialized");
-    if let Ok(size) = sdcard.num_bytes() {
-        info!("SD Card Size: {} bytes", size);
-    }
-
-    // Open volume 0 (main partition)
-    let volume_mgr = VolumeManager::new(sdcard, DummyTimeSource);
-    let volume0 = volume_mgr.open_volume(VolumeIdx(0));
-
-    // Open root directory
-    let root_dir = if let Ok(ref volume) = volume0 {
-        info!("Volume 0 opened");
-        volume.open_root_dir().ok()
-    } else {
-        None
-    };
-    // let sdcard = SdSpiFilesystem::new_with_volume(sdcard_spi, delay.clone())
-    //     .expect("Failed to create SD SPI filesystem");
-
-    // After initializing the SD card, increase the SPI frequency
-    shared_spi
-        .borrow_mut()
-        .apply_config(
-            &Config::default()
-                .with_frequency(Rate::from_mhz(2))
-                .with_mode(Mode::_0),
-        )
-        .expect("Failed to apply the second SPI configuration");
-    if let Some(root_dir) = root_dir {
-        info!("Root directory opened");
-        // List files in root directory
-        let mut buffer = [0u8; 255];
-        let mut lfn = LfnBuffer::new(&mut buffer);
-        root_dir
-            .iterate_dir_lfn(&mut lfn, |f, name| {
-                info!(
-                    "Found dir entry: {:?} ({} bytes, directory: {})",
-                    name,
-                    f.size,
-                    f.attributes.is_directory()
-                );
-            })
-            .ok();
-    }
+    let sdcard = SdSpiFilesystem::new_with_volume(sdcard_spi, delay)
+        .expect("Failed to create SD SPI filesystem");
 
     info!("Display complete! Starting rotation demo...");
+    let mut application = Application::new(&mut display_buffers, sdcard);
 
     loop {
         Timer::after(Duration::from_millis(10)).await;
