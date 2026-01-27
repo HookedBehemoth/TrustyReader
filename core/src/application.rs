@@ -12,7 +12,7 @@ use crate::{
     display::{GrayscaleMode, RefreshMode},
     framebuffer::{BUFFER_SIZE, DisplayBuffers, Rotation},
     fs::{DirEntry, Directory},
-    input, test_image,
+    input, res::img::{bebop, test_image},
 };
 
 pub struct Application<'a, Filesystem>
@@ -49,7 +49,7 @@ where
             dirty: true,
             display_buffers,
             filesystem,
-            screen: 3,
+            screen: 2,
             full_refresh: true,
         }
     }
@@ -95,19 +95,20 @@ where
         self.dirty = false;
         match self.screen {
             0 => self.draw_shapes(display),
-            1 => self.draw_image(display),
-            2 => self.draw_grayscale(display),
-            3 => self.draw_xth(display, GrayscaleMode::Standard),
-            4 => self.draw_xth(display, GrayscaleMode::Fast),
+            1 => self.draw_test_image(display),
+            2 => self.draw_bebop(display),
+            3 => self.draw_grayscale(display),
+            4 => self.draw_xth(display, GrayscaleMode::Standard),
+            5 => self.draw_xth(display, GrayscaleMode::Fast),
             _ => unreachable!(),
         }
         self.full_refresh = false;
     }
 
-    pub fn draw_image(&mut self, display: &mut impl crate::display::Display) {
+    pub fn draw_bebop(&mut self, display: &mut impl crate::display::Display) {
         self.display_buffers
             .get_active_buffer_mut()
-            .copy_from_slice(&test_image::TEST_IMAGE);
+            .copy_from_slice(bebop::BEBOP);
         display.display(
             self.display_buffers,
             if self.full_refresh {
@@ -116,7 +117,23 @@ where
                 RefreshMode::Fast
             },
         );
-        display.copy_grayscale_buffers(&test_image::TEST_IMAGE_LSB, &test_image::TEST_IMAGE_MSB);
+        display.copy_grayscale_buffers(bebop::BEBOP_LSB, bebop::BEBOP_MSB);
+        display.display_differential_grayscale();
+    }
+
+    pub fn draw_test_image(&mut self, display: &mut impl crate::display::Display) {
+        self.display_buffers
+            .get_active_buffer_mut()
+            .copy_from_slice(test_image::TEST_IMAGE);
+        display.display(
+            self.display_buffers,
+            if self.full_refresh {
+                RefreshMode::Full
+            } else {
+                RefreshMode::Fast
+            },
+        );
+        display.copy_grayscale_buffers(test_image::TEST_IMAGE_LSB, test_image::TEST_IMAGE_MSB);
         display.display_differential_grayscale();
     }
 
