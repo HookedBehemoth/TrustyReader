@@ -8,12 +8,14 @@
 #![deny(clippy::large_stack_frames)]
 
 pub mod eink_display;
-pub mod input;
+pub mod adc_input;
+pub mod sdspi_fs;
 
 use core::cell::RefCell;
 
 use crate::eink_display::EInkDisplay;
-use crate::input::*;
+use crate::adc_input::*;
+use crate::sdspi_fs::SdSpiFilesystem;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use embassy_executor::Spawner;
@@ -167,8 +169,8 @@ async fn main(spawner: Spawner) {
         peripherals.ADC1,
     );
 
-    let eink_cs = Output::new(peripherals.GPIO12, Level::High, OutputConfig::default());
-    let sdcard_spi = RefCellDevice::new(&shared_spi, eink_cs, delay.clone())
+    let sdcard_cs = Output::new(peripherals.GPIO12, Level::High, OutputConfig::default());
+    let sdcard_spi = RefCellDevice::new(&shared_spi, sdcard_cs, delay.clone())
         .expect("Failed to create SPI device for SD card");
 
     let sdcard = SdCard::new(sdcard_spi, delay.clone());
@@ -188,6 +190,8 @@ async fn main(spawner: Spawner) {
     } else {
         None
     };
+    // let sdcard = SdSpiFilesystem::new_with_volume(sdcard_spi, delay.clone())
+    //     .expect("Failed to create SD SPI filesystem");
 
     // After initializing the SD card, increase the SPI frequency
     shared_spi

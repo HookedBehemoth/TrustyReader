@@ -6,7 +6,7 @@ version.workspace = true
 
 [dependencies]
 log.workspace = true
-trusty_core = { path = "../core" }
+trusty-core = { path = "../core" }
 
 # In 1.0.0 GPIO Pins 12-17 aren't exposed
 esp-hal = { git = "https://github.com/esp-rs/esp-hal", features = ["esp32c3", "log-04", "unstable"] }

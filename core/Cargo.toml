@@ -1,8 +1,9 @@
 [package]
-name = "trusty_core"
+name = "trusty-core"
 edition.workspace = true
 rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
 embedded-graphics.workspace = true
+miniz_oxide = { version = "0.9.0", default-features = false }
