@@ -42,6 +42,13 @@ pub trait File: Read + Write + Seek {
         self.read(buf)?;
         Ok(value)
     }
+    unsafe fn write_sized<T: Sized>(&mut self, value: &T) -> core::result::Result<(), Self::Error> {
+        let buf = unsafe {
+            core::slice::from_raw_parts(value as *const T as *const u8, core::mem::size_of::<T>())
+        };
+        self.write_all(buf)?;
+        Ok(())
+    }
 }
 
 pub trait Directory: ErrorType {

@@ -1,3 +1,4 @@
+use alloc::boxed::Box;
 use embedded_graphics::{
     Drawable,
     mono_font::{MonoTextStyle, ascii::FONT_10X20},
@@ -9,10 +10,12 @@ use embedded_graphics::{
 use log::info;
 
 use crate::{
+    container::xt,
     display::{GrayscaleMode, RefreshMode},
     framebuffer::{BUFFER_SIZE, DisplayBuffers, Rotation},
     fs::{DirEntry, Directory},
-    input, res::img::{bebop, test_image},
+    input,
+    res::img::{bebop, test_image},
 };
 
 pub struct Application<'a, Filesystem>
@@ -27,29 +30,18 @@ where
 }
 
 static XTH_DATA: &[u8] = include_bytes!("page_1.xth");
+static XTG_DATA: &[u8] = include_bytes!("test.xtg");
 
 impl<'a, Filesystem> Application<'a, Filesystem>
 where
     Filesystem: crate::fs::Filesystem,
 {
     pub fn new(display_buffers: &'a mut DisplayBuffers, filesystem: Filesystem) -> Self {
-        {
-            let root = filesystem.open_directory(".").unwrap();
-            let entries = root.list().unwrap();
-            for entry in &entries {
-                info!(
-                    "Found root entry: {} (sz: {}) {}",
-                    entry.name(),
-                    entry.size(),
-                    if entry.is_directory() { "<DIR>" } else { "" }
-                );
-            }
-        }
         Application {
             dirty: true,
             display_buffers,
             filesystem,
-            screen: 2,
+            screen: 6,
             full_refresh: true,
         }
     }
@@ -75,10 +67,10 @@ where
                 });
             self.dirty = true;
         } else if buttons.is_pressed(input::Buttons::Up) {
-            self.screen = if self.screen == 0 { 4 } else { self.screen - 1 };
+            self.screen = if self.screen == 0 { 6 } else { self.screen - 1 };
             self.dirty = true;
         } else if buttons.is_pressed(input::Buttons::Down) {
-            self.screen = if self.screen == 4 { 0 } else { self.screen + 1 };
+            self.screen = if self.screen == 6 { 0 } else { self.screen + 1 };
             self.dirty = true;
         } else if buttons.is_pressed(input::Buttons::Back) {
             self.full_refresh = !self.full_refresh;
@@ -100,6 +92,7 @@ where
             3 => self.draw_grayscale(display),
             4 => self.draw_xth(display, GrayscaleMode::Standard),
             5 => self.draw_xth(display, GrayscaleMode::Fast),
+            6 => self.draw_xtg(display),
             _ => unreachable!(),
         }
         self.full_refresh = false;
@@ -244,5 +237,13 @@ where
         let msb = &XTH_DATA[(0x16 + BUFFER_SIZE)..(0x16 + 2 * BUFFER_SIZE)];
         display.copy_grayscale_buffers(lsb.try_into().unwrap(), msb.try_into().unwrap());
         display.display_absolute_grayscale(mode);
+    }
+
+    fn draw_xtg(&mut self, display: &mut impl crate::display::Display) {
+        let buffer = XTG_DATA;
+        self.display_buffers
+            .get_active_buffer_mut()
+            .copy_from_slice(&buffer[0x16..]);
+        display.display(self.display_buffers, RefreshMode::Full);
     }
 }
