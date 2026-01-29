@@ -108,6 +108,9 @@ async fn main(spawner: Spawner) {
     let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
     let peripherals = esp_hal::init(config);
 
+    let mut flash = esp_storage::FlashStorage::new(peripherals.FLASH);
+    verify_ota(&mut flash);
+
     let mut rtc = Rtc::new(peripherals.LPWR);
 
     info!("up and runnning!");
@@ -198,7 +201,7 @@ async fn main(spawner: Spawner) {
     if application.ota_running()
     {
         info!("OTA requested; switching boot partition");
-        switch_ota(peripherals.FLASH);
+        switch_ota(&mut flash);
     }
 
     info!("Application exiting, entering sleep mode.");
@@ -213,12 +216,32 @@ async fn main(spawner: Spawner) {
     rtc.sleep_deep(&[&rtcio]);
 }
 
-fn switch_ota(flash: esp_hal::peripherals::FLASH<'_>) -> ! {
-    let mut storage = esp_storage::FlashStorage::new(flash);
+fn verify_ota(storage: &mut esp_storage::FlashStorage) {
     let mut buffer = [0u8; esp_bootloader_esp_idf::partitions::PARTITION_TABLE_MAX_LEN];
 
     let mut ota =
-        esp_bootloader_esp_idf::ota_updater::OtaUpdater::new(&mut storage, &mut buffer).unwrap();
+        esp_bootloader_esp_idf::ota_updater::OtaUpdater::new(storage, &mut buffer).unwrap();
+
+    let current_state = ota.current_ota_state();
+    info!("current image state {:?}", current_state);
+    info!("currently selected partition {:?}", ota.selected_partition());
+
+    match current_state {
+        Ok(esp_bootloader_esp_idf::ota::OtaImageState::PendingVerify) => {
+            info!("Verifying OTA partition...");
+            ota.set_current_ota_state(esp_bootloader_esp_idf::ota::OtaImageState::Valid)
+                .unwrap();
+        },
+        Ok(state) => info!("OTA partition in state {:?}", state),
+        Err(e) => info!("OTA partition verification failed: {:?}", e),
+    }
+}
+
+fn switch_ota(storage: &mut esp_storage::FlashStorage) -> ! {
+    let mut buffer = [0u8; esp_bootloader_esp_idf::partitions::PARTITION_TABLE_MAX_LEN];
+
+    let mut ota =
+        esp_bootloader_esp_idf::ota_updater::OtaUpdater::new(storage, &mut buffer).unwrap();
 
     info!("current image state {:?}", ota.current_ota_state());
     info!("currently selected partition {:?}", ota.selected_partition());
