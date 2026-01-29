@@ -18,6 +18,7 @@ esp-backtrace = { git = "https://github.com/esp-rs/esp-hal", features = [
   "panic-handler",
   "println",
 ] }
+esp-storage = { git = "https://github.com/esp-rs/esp-hal", features = ["esp32c3"] }
 esp-println = { git = "https://github.com/esp-rs/esp-hal", features = ["esp32c3", "log-04"] }
 embedded-graphics.workspace = true
 embedded-hal = "1.0.0"

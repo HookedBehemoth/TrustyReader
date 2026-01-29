@@ -28,6 +28,7 @@ where
     screen: usize,
     full_refresh: bool,
     sleep: bool,
+    ota: bool,
 }
 
 static XTH_DATA: &[u8] = include_bytes!("page_1.xth");
@@ -45,18 +46,27 @@ where
             screen: 8,
             full_refresh: true,
             sleep: false,
+            ota: false,
         }
     }
 
     pub fn running(&self) -> bool {
-        !self.sleep
+        !self.sleep && !self.ota
+    }
+
+    pub fn ota_running(&self) -> bool {
+        self.ota
     }
 
     pub fn update(&mut self, buttons: &input::ButtonState) {
         self.dirty |= buttons.is_pressed(input::Buttons::Confirm);
-        if buttons.is_held(input::Buttons::Power) {
-            self.full_refresh = true;
-            self.sleep = true;
+        if buttons.is_pressed(input::Buttons::Power) {
+            if buttons.is_held(input::Buttons::Confirm) {
+                self.ota = true;
+            } else {
+                self.full_refresh = true;
+                self.sleep = true;
+            }
             return;
         } else if buttons.is_pressed(input::Buttons::Left) {
             self.display_buffers

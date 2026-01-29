@@ -195,6 +195,12 @@ async fn main(spawner: Spawner) {
         application.draw(&mut display);
     }
 
+    if application.ota_running()
+    {
+        info!("OTA requested; switching boot partition");
+        switch_ota(peripherals.FLASH);
+    }
+
     info!("Application exiting, entering sleep mode.");
 
     let mut power_pin = peripherals.GPIO3;
@@ -205,4 +211,22 @@ async fn main(spawner: Spawner) {
     info!("Sleeping");
     delay.delay_millis(100);
     rtc.sleep_deep(&[&rtcio]);
+}
+
+fn switch_ota(flash: esp_hal::peripherals::FLASH<'_>) -> ! {
+    let mut storage = esp_storage::FlashStorage::new(flash);
+    let mut buffer = [0u8; esp_bootloader_esp_idf::partitions::PARTITION_TABLE_MAX_LEN];
+
+    let mut ota =
+        esp_bootloader_esp_idf::ota_updater::OtaUpdater::new(&mut storage, &mut buffer).unwrap();
+
+    info!("current image state {:?}", ota.current_ota_state());
+    info!("currently selected partition {:?}", ota.selected_partition());
+
+    ota.activate_next_partition().unwrap();
+    ota.set_current_ota_state(esp_bootloader_esp_idf::ota::OtaImageState::New)
+        .unwrap();
+
+    info!("Restarting device");
+    esp_hal::system::software_reset();
 }

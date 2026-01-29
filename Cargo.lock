@@ -902,6 +902,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "esp-storage"
+version = "0.8.1"
+source = "git+https://github.com/esp-rs/esp-hal#63e76bd45a591410ba36c851ec6609bdf1472b65"
+dependencies = [
+ "document-features",
+ "embedded-storage",
+ "esp-hal",
+ "esp-hal-procmacros",
+ "esp-metadata-generated",
+ "esp-rom-sys",
+ "esp-sync",
+]
+
+[[package]]
 name = "esp-sync"
 version = "0.1.1"
 source = "git+https://github.com/esp-rs/esp-hal#0b9e4e052ec181659b5feac7da3ade60643291b7"
@@ -2080,6 +2094,7 @@ dependencies = [
  "esp-hal",
  "esp-println",
  "esp-rtos",
+ "esp-storage",
  "log",
  "nb 1.1.0",
  "static_cell",
