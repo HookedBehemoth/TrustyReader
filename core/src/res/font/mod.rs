@@ -1,5 +1,5 @@
 use embedded_graphics::{pixelcolor::BinaryColor, prelude::OriginDimensions};
-use log::{info, trace, warn};
+use log::{trace, warn};
 
 use crate::framebuffer::DisplayBuffers;
 
@@ -20,7 +20,6 @@ pub enum FontFamily {
     Bookerly,
 }
 
-// pub mod pat;
 pub mod bookerly_26;
 pub mod bookerly_28;
 pub mod bookerly_30;
@@ -66,12 +65,11 @@ impl Glyph {
         assert!(height < 0x40);
         assert!(xmin >= -32 && xmin < 32);
         assert!(ymin >= -32 && ymin < 32);
-        let blob =
-            ((x_advance as u32) << 26) |
-            ((width as u32) << 20) |
-            ((height as u32) << 14) |
-            (((xmin as i32 + 32) as u32) << 8) |
-            ((ymin as i32 + 32) as u32);
+        let blob = ((x_advance as u32) << 26)
+            | ((width as u32) << 20)
+            | ((height as u32) << 14)
+            | (((xmin as i32 + 32) as u32) << 8)
+            | ((ymin as i32 + 32) as u32);
         Self {
             codepoint,
             bitmap_index,
@@ -100,7 +98,9 @@ impl Glyph {
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
-    Bw, Msb, Lsb,
+    Bw,
+    Msb,
+    Lsb,
 }
 
 pub fn draw_glyph(
@@ -111,7 +111,9 @@ pub fn draw_glyph(
     y_offset: isize,
     mode: Mode,
 ) -> Result<u8, usize> {
-    let glyph = font.glyphs.binary_search_by(|glyph| glyph.codepoint.cmp(&codepoint))?;
+    let glyph = font
+        .glyphs
+        .binary_search_by(|glyph| glyph.codepoint.cmp(&codepoint))?;
     let glyph = &font.glyphs[glyph];
 
     let bitmap = match mode {
@@ -127,8 +129,10 @@ pub fn draw_glyph(
 
     let size = display_buffers.size();
 
-    trace!("Drawing glyph U+{:04X} at offset ({}, {}) with size {}x{}, xmin {}, ymin {}",
-        codepoint, x_offset, y_offset, width, height, xmin, ymin);
+    trace!(
+        "Drawing glyph U+{:04X} at offset ({}, {}) with size {}x{}, xmin {}, ymin {}",
+        codepoint, x_offset, y_offset, width, height, xmin, ymin
+    );
 
     let x_offset = x_offset + xmin as isize;
     let y_offset = y_offset - height as isize - ymin as isize;
@@ -141,7 +145,8 @@ pub fn draw_glyph(
                 continue;
             }
 
-            let bitmap_index = glyph.bitmap_index as usize + (y as usize * width as usize + x as usize) / 8;
+            let bitmap_index =
+                glyph.bitmap_index as usize + (y as usize * width as usize + x as usize) / 8;
             let bitmap_bit = 7 - ((y as usize * width as usize + x as usize) % 8);
 
             let byte = bitmap[bitmap_index];

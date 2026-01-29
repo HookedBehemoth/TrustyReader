@@ -306,7 +306,7 @@ impl trusty_core::display::Display for MinifbDisplay {
         self.lsb_buffer.copy_from_slice(lsb);
         self.msb_buffer.copy_from_slice(msb);
     }
-    fn display_differential_grayscale(&mut self) {
+    fn display_differential_grayscale(&mut self, turn_off_screen: bool) {
         self.is_grayscale = true;
         self.blit_internal(BlitMode::Grayscale);
     }

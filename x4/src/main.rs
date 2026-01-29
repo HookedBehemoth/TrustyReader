@@ -19,17 +19,18 @@ use crate::sdspi_fs::SdSpiFilesystem;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use embassy_executor::Spawner;
-use embassy_time::{Duration, Timer};
 use embedded_hal_bus::spi::RefCellDevice;
 use esp_backtrace as _;
 use esp_hal::Async;
 use esp_hal::clock::CpuClock;
 use esp_hal::delay::Delay;
-use esp_hal::gpio::{Input, InputConfig, Level, Output, OutputConfig};
+use esp_hal::gpio::{Input, InputConfig, Level, Output, OutputConfig, RtcPinWithResistors};
 use esp_hal::interrupt::software::SoftwareInterruptControl;
+use esp_hal::rtc_cntl::sleep::{RtcioWakeupSource, WakeupLevel};
+use esp_hal::rtc_cntl::{Rtc, SocResetReason, reset_reason, wakeup_cause};
 use esp_hal::spi::Mode;
 use esp_hal::spi::master::{Config, Spi};
-use esp_hal::time::Rate;
+use esp_hal::system::Cpu;
 use esp_hal::timer::timg::TimerGroup;
 use esp_hal::usb_serial_jtag::{UsbSerialJtag, UsbSerialJtagRx};
 use log::info;
@@ -107,6 +108,14 @@ async fn main(spawner: Spawner) {
     let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
     let peripherals = esp_hal::init(config);
 
+    let mut rtc = Rtc::new(peripherals.LPWR);
+
+    info!("up and runnning!");
+    let reason = reset_reason(Cpu::ProCpu).unwrap_or(SocResetReason::ChipPowerOn);
+    info!("reset reason: {:?}", reason);
+    let wake_reason = wakeup_cause();
+    info!("wake reason: {:?}", wake_reason);
+
     esp_alloc::heap_allocator!(#[esp_hal::ram(reclaimed)] size: 0x10000);
     esp_alloc::heap_allocator!(size: 300000);
 
@@ -127,7 +136,7 @@ async fn main(spawner: Spawner) {
 
     // Initialize shared SPI bus
     let spi_cfg = Config::default()
-        .with_frequency(Rate::from_mhz(40))
+        .with_frequency(esp_hal::time::Rate::from_mhz(40))
         .with_mode(Mode::_0);
     let spi = Spi::new(peripherals.SPI2, spi_cfg)
         .expect("Failed to create SPI")
@@ -163,7 +172,7 @@ async fn main(spawner: Spawner) {
     let mut button_state = GpioButtonState::new(
         peripherals.GPIO1,
         peripherals.GPIO2,
-        peripherals.GPIO3,
+        unsafe { peripherals.GPIO3.clone_unchecked() },
         peripherals.ADC1,
     );
 
@@ -177,28 +186,23 @@ async fn main(spawner: Spawner) {
     info!("Display complete! Starting rotation demo...");
     let mut application = Application::new(&mut display_buffers, sdcard);
 
-    loop {
-        Timer::after(Duration::from_millis(10)).await;
+    while application.running() {
+        embassy_time::Timer::after(embassy_time::Duration::from_millis(10)).await;
 
         button_state.update();
         let buttons = button_state.get_buttons();
         application.update(&buttons);
         application.draw(&mut display);
     }
-}
 
-/// Dummy time source for embedded-sdmmc (use RTC for real timestamps)
-pub struct DummyTimeSource;
+    info!("Application exiting, entering sleep mode.");
 
-impl embedded_sdmmc::TimeSource for DummyTimeSource {
-    fn get_timestamp(&self) -> embedded_sdmmc::Timestamp {
-        embedded_sdmmc::Timestamp {
-            year_since_1970: 0,
-            zero_indexed_month: 0,
-            zero_indexed_day: 0,
-            hours: 0,
-            minutes: 0,
-            seconds: 0,
-        }
-    }
+    let mut power_pin = peripherals.GPIO3;
+    let wakeup_pins: &mut [(&mut dyn RtcPinWithResistors, WakeupLevel)] =
+        &mut [(&mut power_pin, WakeupLevel::Low)];
+
+    let rtcio = RtcioWakeupSource::new(wakeup_pins);
+    info!("Sleeping");
+    delay.delay_millis(100);
+    rtc.sleep_deep(&[&rtcio]);
 }

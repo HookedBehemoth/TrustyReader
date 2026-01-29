@@ -23,6 +23,6 @@ pub trait Display {
     fn copy_to_lsb(&mut self, buffers: &[u8; BUFFER_SIZE]);
     fn copy_to_msb(&mut self, buffers: &[u8; BUFFER_SIZE]);
     fn copy_grayscale_buffers(&mut self, lsb: &[u8; BUFFER_SIZE], msb: &[u8; BUFFER_SIZE]);
-    fn display_differential_grayscale(&mut self);
+    fn display_differential_grayscale(&mut self, turn_off_screen: bool);
     fn display_absolute_grayscale(&mut self, mode: GrayscaleMode);
 }

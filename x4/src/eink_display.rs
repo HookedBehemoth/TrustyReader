@@ -553,8 +553,8 @@ where
         self.write_ram_buffer(commands::WRITE_RAM_RED, msb).unwrap();
     }
 
-    fn display_differential_grayscale(&mut self) {
-        self.display_gray_buffer(false).unwrap();
+    fn display_differential_grayscale(&mut self, turn_off_screen: bool) {
+        self.display_gray_buffer(turn_off_screen).unwrap();
     }
 
     fn display_absolute_grayscale(&mut self, mode: GrayscaleMode) {

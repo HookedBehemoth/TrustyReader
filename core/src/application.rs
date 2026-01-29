@@ -11,7 +11,10 @@ use crate::{
     display::{GrayscaleMode, RefreshMode},
     framebuffer::{BUFFER_SIZE, DisplayBuffers, Rotation},
     input,
-    res::{font::{self, draw_glyph}, img::{bebop, test_image}},
+    res::{
+        font::{self, draw_glyph},
+        img::{bebop, test_image},
+    },
 };
 
 pub struct Application<'a, Filesystem>
@@ -23,6 +26,7 @@ where
     filesystem: Filesystem,
     screen: usize,
     full_refresh: bool,
+    sleep: bool,
 }
 
 static XTH_DATA: &[u8] = include_bytes!("page_1.xth");
@@ -39,12 +43,21 @@ where
             filesystem,
             screen: 7,
             full_refresh: true,
+            sleep: false,
         }
+    }
+
+    pub fn running(&self) -> bool {
+        !self.sleep
     }
 
     pub fn update(&mut self, buttons: &input::ButtonState) {
         self.dirty |= buttons.is_pressed(input::Buttons::Confirm);
-        if buttons.is_pressed(input::Buttons::Left) {
+        if buttons.is_held(input::Buttons::Power) {
+            self.full_refresh = true;
+            self.sleep = true;
+            return;
+        } else if buttons.is_pressed(input::Buttons::Left) {
             self.display_buffers
                 .set_rotation(match self.display_buffers.rotation() {
                     Rotation::Rotate0 => Rotation::Rotate270,
@@ -77,6 +90,10 @@ where
     }
 
     pub fn draw(&mut self, display: &mut impl crate::display::Display) {
+        if self.sleep {
+            self.draw_bebop(display);
+            return;
+        }
         if !self.dirty {
             return;
         }
@@ -108,7 +125,7 @@ where
             },
         );
         display.copy_grayscale_buffers(bebop::BEBOP_LSB, bebop::BEBOP_MSB);
-        display.display_differential_grayscale();
+        display.display_differential_grayscale(self.sleep);
     }
 
     pub fn draw_test_image(&mut self, display: &mut impl crate::display::Display) {
@@ -124,7 +141,7 @@ where
             },
         );
         display.copy_grayscale_buffers(test_image::TEST_IMAGE_LSB, test_image::TEST_IMAGE_MSB);
-        display.display_differential_grayscale();
+        display.display_differential_grayscale(false);
     }
 
     pub fn draw_shapes(&mut self, display: &mut impl crate::display::Display) {
@@ -226,7 +243,7 @@ where
             .ok();
 
         display.copy_to_lsb(self.display_buffers.get_active_buffer());
-        display.display_differential_grayscale();
+        display.display_differential_grayscale(false);
     }
 
     fn draw_xth(&mut self, display: &mut impl crate::display::Display, mode: GrayscaleMode) {
@@ -248,7 +265,7 @@ where
         self.display_buffers.clear(BinaryColor::On).ok();
 
         let font = &crate::res::font::bookerly_26::FONT;
-        
+
         let size = self.display_buffers.size();
 
         let x_start = 10usize;
@@ -267,7 +284,9 @@ where
                 self.display_buffers,
                 x_advance as isize,
                 y_advance as isize,
-                font::Mode::Bw).expect("Glyph not found");
+                font::Mode::Bw,
+            )
+            .expect("Glyph not found");
             x_advance += glyph.x_advance() as usize;
         }
 
@@ -295,7 +314,9 @@ where
                 self.display_buffers,
                 x_advance as isize,
                 y_advance as isize,
-                font::Mode::Msb).expect("Glyph not found");
+                font::Mode::Msb,
+            )
+            .expect("Glyph not found");
             x_advance += glyph.x_advance() as usize;
         }
 
@@ -316,11 +337,13 @@ where
                 self.display_buffers,
                 x_advance as isize,
                 y_advance as isize,
-                font::Mode::Lsb).expect("Glyph not found");
+                font::Mode::Lsb,
+            )
+            .expect("Glyph not found");
             x_advance += glyph.x_advance() as usize;
         }
 
         display.copy_to_lsb(self.display_buffers.get_active_buffer());
-        display.display_differential_grayscale();
+        display.display_differential_grayscale(false);
     }
 }

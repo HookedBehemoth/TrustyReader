@@ -1,7 +1,7 @@
 use esp_hal::{
     Blocking,
     analog::adc::{Adc, AdcCalLine, AdcChannel, AdcConfig, AdcPin, Attenuation},
-    gpio::{AnalogPin, Input, InputConfig, InputPin},
+    gpio::{AnalogPin, Input, InputConfig, InputPin, Pull},
     peripherals::ADC1,
 };
 use log::trace;
@@ -33,7 +33,7 @@ impl<'a, Pin1: AdcChannel + AnalogPin, Pin2: AdcChannel + AnalogPin>
 
         let pin1 = adc_config.enable_pin_with_cal::<_, AdcCal>(pin1, Attenuation::_11dB);
         let pin2 = adc_config.enable_pin_with_cal::<_, AdcCal>(pin2, Attenuation::_11dB);
-        let pin_power = Input::new(pin_power, InputConfig::default());
+        let pin_power = Input::new(pin_power, InputConfig::default().with_pull(Pull::Up));
         let adc = Adc::new(adc, adc_config);
         GpioButtonState {
             inner: ButtonState::default(),

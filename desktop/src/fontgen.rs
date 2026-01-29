@@ -1,8 +1,10 @@
 use embedded_graphics::prelude::OriginDimensions;
 use image::ImageFormat;
 use log::{info, trace, warn};
-use trusty_core::{framebuffer::{BUFFER_SIZE, DisplayBuffers, HEIGHT, WIDTH}, res::font::{FontDefinition, Glyph, Mode, draw_glyph}};
-
+use trusty_core::{
+    framebuffer::{BUFFER_SIZE, DisplayBuffers, HEIGHT, WIDTH},
+    res::font::{FontDefinition, Glyph, Mode, draw_glyph},
+};
 
 /// CLI Arguments
 #[derive(argh::FromArgs)]
@@ -37,14 +39,13 @@ fn main() {
 }
 
 fn generate_font(font_path: &str, sizes: &[f32], characters: &[char], out_path: &str) {
-    let font_file = std::fs::read(font_path)
-        .expect("Failed to read input font file");
+    let font_file = std::fs::read(font_path).expect("Failed to read input font file");
     let font = fontdue::Font::from_bytes(font_file.as_slice(), fontdue::FontSettings::default())
         .expect("Failed to parse font file");
 
     for &size in sizes {
         generate_font_size(&font, size, characters, out_path);
-        analyze_font_metrics(&font, size);
+        // analyze_font_metrics(&font, size);
     }
 }
 
@@ -94,15 +95,9 @@ fn generate_font_size(font: &fontdue::Font, font_size: f32, characters: &[char],
             };
             let byte_idx = bitmap_index as usize + idx / 8;
             let bit_idx = 7 - (idx % 8);
-            bw_buffer
-                .get_mut(byte_idx)
-                .map(|b| *b |= bw << bit_idx);
-            msb_buffer
-                .get_mut(byte_idx)
-                .map(|b| *b |= msb << bit_idx);
-            lsb_buffer
-                .get_mut(byte_idx)
-                .map(|b| *b |= lsb << bit_idx);
+            bw_buffer.get_mut(byte_idx).map(|b| *b |= bw << bit_idx);
+            msb_buffer.get_mut(byte_idx).map(|b| *b |= msb << bit_idx);
+            lsb_buffer.get_mut(byte_idx).map(|b| *b |= lsb << bit_idx);
         }
         let bytes = bitmap.len().div_ceil(8);
         bitmap_index += bytes as u16;
@@ -113,7 +108,10 @@ fn generate_font_size(font: &fontdue::Font, font_size: f32, characters: &[char],
 
     let my_font = FontDefinition {
         size: bw_buffer.len() as u32,
-        y_advance: font.vertical_line_metrics(font_size).map(|m| m.new_line_size.ceil() as usize).unwrap_or(font_size.ceil() as usize) as u8,
+        y_advance: font
+            .vertical_line_metrics(font_size)
+            .map(|m| m.new_line_size.ceil() as usize)
+            .unwrap_or(font_size.ceil() as usize) as u8,
         glyphs: &glyphs,
         bitmap_bw: &bw_buffer,
         bitmap_msb: &msb_buffer,
@@ -121,19 +119,28 @@ fn generate_font_size(font: &fontdue::Font, font_size: f32, characters: &[char],
     };
 
     let name = font.name().expect("Failed to get font name");
-    let file_name = format!("{}_{}", name.to_ascii_lowercase().replace(" ", "_"), font_size as u8);
+    let file_name = format!(
+        "{}_{}",
+        name.to_ascii_lowercase().replace(" ", "_"),
+        font_size as u8
+    );
     info!("Generating font: {name} as {file_name} at size {font_size}");
     let base_path = std::path::Path::new(&out_path).join(&file_name);
-    std::fs::write(base_path.with_extension("bw"), &bw_buffer).expect("Failed to write BW font file");
-    std::fs::write(base_path.with_extension("msb"), &msb_buffer).expect("Failed to write MSB font file");
-    std::fs::write(base_path.with_extension("lsb"), &lsb_buffer).expect("Failed to write LSB font file");
+    std::fs::write(base_path.with_extension("bw"), &bw_buffer)
+        .expect("Failed to write BW font file");
+    std::fs::write(base_path.with_extension("msb"), &msb_buffer)
+        .expect("Failed to write MSB font file");
+    std::fs::write(base_path.with_extension("lsb"), &lsb_buffer)
+        .expect("Failed to write LSB font file");
 
     let rust_file = base_path.with_extension("rs");
     let mut rust_code = String::new();
     rust_code.push_str("// Auto-generated font file\n");
     rust_code.push_str(&format!("// Font: {}\n\n", name));
     rust_code.push_str("use crate::res::font::{FontDefinition, Glyph};\n\n");
-    rust_code.push_str(&format!("pub static FONT: FontDefinition = FontDefinition {{\n"));
+    rust_code.push_str(&format!(
+        "pub static FONT: FontDefinition = FontDefinition {{\n"
+    ));
     rust_code.push_str(&format!("    size: {},\n", my_font.size));
     rust_code.push_str(&format!("    y_advance: {},\n", my_font.y_advance));
     rust_code.push_str(&format!("    glyphs: &GLYPHS,\n"));
@@ -145,16 +152,34 @@ fn generate_font_size(font: &fontdue::Font, font_size: f32, characters: &[char],
     for glyph in &glyphs {
         rust_code.push_str(&format!(
             "    Glyph::new(0x{:04X}, 0x{:04X}, {}, {}, {}, {}, {}),\n",
-            glyph.codepoint, glyph.bitmap_index, glyph.x_advance(), glyph.width(), glyph.height(), glyph.xmin(), glyph.ymin()
+            glyph.codepoint,
+            glyph.bitmap_index,
+            glyph.x_advance(),
+            glyph.width(),
+            glyph.height(),
+            glyph.xmin(),
+            glyph.ymin()
         ));
     }
     rust_code.push_str("];\n\n");
-    rust_code.push_str(&format!("static BITMAP_BW: &'static [u8; {}] = include_bytes!(\"./{}.bw\");\n", bw_buffer.len(), file_name));
-    rust_code.push_str(&format!("static BITMAP_MSB: &'static [u8; {}] = include_bytes!(\"./{}.msb\");\n", msb_buffer.len(), file_name));
-    rust_code.push_str(&format!("static BITMAP_LSB: &'static [u8; {}] = include_bytes!(\"./{}.lsb\");\n", lsb_buffer.len(), file_name));
+    rust_code.push_str(&format!(
+        "static BITMAP_BW: &'static [u8; {}] = include_bytes!(\"./{}.bw\");\n",
+        bw_buffer.len(),
+        file_name
+    ));
+    rust_code.push_str(&format!(
+        "static BITMAP_MSB: &'static [u8; {}] = include_bytes!(\"./{}.msb\");\n",
+        msb_buffer.len(),
+        file_name
+    ));
+    rust_code.push_str(&format!(
+        "static BITMAP_LSB: &'static [u8; {}] = include_bytes!(\"./{}.lsb\");\n",
+        lsb_buffer.len(),
+        file_name
+    ));
     std::fs::write(&rust_file, rust_code).expect("Failed to write Rust font file");
 
-    test_font_drawing(&my_font);
+    // test_font_drawing(&my_font);
 }
 
 fn test_font_drawing(font: &FontDefinition) {
@@ -179,9 +204,33 @@ fn test_font_drawing(font: &FontDefinition) {
             x_advance = x_start;
             y_advance += font.y_advance as usize;
         }
-        draw_glyph(&font, glyph.codepoint, &mut fb_bw, x_advance as isize, y_advance as isize, Mode::Bw).expect("Glyph not found");
-        draw_glyph(&font, glyph.codepoint, &mut fb_msb, x_advance as isize, y_advance as isize, Mode::Msb).expect("Glyph not found");
-        draw_glyph(&font, glyph.codepoint, &mut fb_lsb, x_advance as isize, y_advance as isize, Mode::Lsb).expect("Glyph not found");
+        draw_glyph(
+            &font,
+            glyph.codepoint,
+            &mut fb_bw,
+            x_advance as isize,
+            y_advance as isize,
+            Mode::Bw,
+        )
+        .expect("Glyph not found");
+        draw_glyph(
+            &font,
+            glyph.codepoint,
+            &mut fb_msb,
+            x_advance as isize,
+            y_advance as isize,
+            Mode::Msb,
+        )
+        .expect("Glyph not found");
+        draw_glyph(
+            &font,
+            glyph.codepoint,
+            &mut fb_lsb,
+            x_advance as isize,
+            y_advance as isize,
+            Mode::Lsb,
+        )
+        .expect("Glyph not found");
         x_advance += glyph.x_advance() as usize;
     }
 
@@ -221,28 +270,32 @@ fn test_font_drawing(font: &FontDefinition) {
         WIDTH as u32,
         HEIGHT as u32,
         image::ColorType::L8,
-    ).expect("Failed to save image");
+    )
+    .expect("Failed to save image");
     image::save_buffer(
         &std::path::Path::new("font_msb.png"),
         &blowup_msb,
         WIDTH as u32,
         HEIGHT as u32,
         image::ColorType::L8,
-    ).expect("Failed to save image");
+    )
+    .expect("Failed to save image");
     image::save_buffer(
         &std::path::Path::new("font_lsb.png"),
         &blowup_lsb,
         WIDTH as u32,
         HEIGHT as u32,
         image::ColorType::L8,
-    ).expect("Failed to save image");
+    )
+    .expect("Failed to save image");
     image::save_buffer(
         &std::path::Path::new("font_merged.png"),
         &merged,
         WIDTH as u32,
         HEIGHT as u32,
         image::ColorType::L8,
-    ).expect("Failed to save image");
+    )
+    .expect("Failed to save image");
 }
 
 fn analyze_font_metrics(font: &fontdue::Font, font_size: f32) {
@@ -259,8 +312,7 @@ fn analyze_font_metrics(font: &fontdue::Font, font_size: f32) {
         if metrics.advance_width > 63.0 {
             warn!(
                 "Large advance for '{ch}' width: Index: {}, Advance Width: {}",
-                idx,
-                metrics.advance_width
+                idx, metrics.advance_width
             );
             continue;
         }
@@ -284,8 +336,10 @@ static DEFAULT_CHARACTERS: &str = r##" !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHI
 
 fn load_chars(path: Option<&str>) -> Vec<char> {
     let mut characters = if let Some(character_file) = path {
-        std::fs::read_to_string(character_file).expect("Failed to read character file")
-            .chars().collect::<Vec<char>>()
+        std::fs::read_to_string(character_file)
+            .expect("Failed to read character file")
+            .chars()
+            .collect::<Vec<char>>()
     } else {
         DEFAULT_CHARACTERS.chars().collect::<Vec<char>>()
     };
