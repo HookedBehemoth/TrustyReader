@@ -1,4 +1,3 @@
-use alloc::boxed::Box;
 use embedded_graphics::{
     Drawable,
     mono_font::{MonoTextStyle, ascii::FONT_10X20},
@@ -7,15 +6,12 @@ use embedded_graphics::{
     primitives::{Circle, PrimitiveStyle, Rectangle},
     text::Text,
 };
-use log::info;
 
 use crate::{
-    container::xt,
     display::{GrayscaleMode, RefreshMode},
     framebuffer::{BUFFER_SIZE, DisplayBuffers, Rotation},
-    fs::{DirEntry, Directory},
     input,
-    res::img::{bebop, test_image},
+    res::{font::{self, draw_glyph}, img::{bebop, test_image}},
 };
 
 pub struct Application<'a, Filesystem>
@@ -41,7 +37,7 @@ where
             dirty: true,
             display_buffers,
             filesystem,
-            screen: 6,
+            screen: 7,
             full_refresh: true,
         }
     }
@@ -67,10 +63,10 @@ where
                 });
             self.dirty = true;
         } else if buttons.is_pressed(input::Buttons::Up) {
-            self.screen = if self.screen == 0 { 6 } else { self.screen - 1 };
+            self.screen = if self.screen == 0 { 7 } else { self.screen - 1 };
             self.dirty = true;
         } else if buttons.is_pressed(input::Buttons::Down) {
-            self.screen = if self.screen == 6 { 0 } else { self.screen + 1 };
+            self.screen = if self.screen == 7 { 0 } else { self.screen + 1 };
             self.dirty = true;
         } else if buttons.is_pressed(input::Buttons::Back) {
             self.full_refresh = !self.full_refresh;
@@ -93,6 +89,7 @@ where
             4 => self.draw_xth(display, GrayscaleMode::Standard),
             5 => self.draw_xth(display, GrayscaleMode::Fast),
             6 => self.draw_xtg(display),
+            7 => self.draw_text(display),
             _ => unreachable!(),
         }
         self.full_refresh = false;
@@ -245,5 +242,85 @@ where
             .get_active_buffer_mut()
             .copy_from_slice(&buffer[0x16..]);
         display.display(self.display_buffers, RefreshMode::Full);
+    }
+
+    fn draw_text(&mut self, display: &mut impl crate::display::Display) {
+        self.display_buffers.clear(BinaryColor::On).ok();
+
+        let font = &crate::res::font::bookerly_26::FONT;
+        
+        let size = self.display_buffers.size();
+
+        let x_start = 10usize;
+        let x_end = size.width as usize - 10usize;
+        let mut x_advance = x_start;
+        let mut y_advance = 0usize;
+        y_advance += font.y_advance as usize;
+        for glyph in font.glyphs {
+            if (x_advance + glyph.x_advance() as usize) > x_end {
+                x_advance = x_start;
+                y_advance += font.y_advance as usize;
+            }
+            draw_glyph(
+                &font,
+                glyph.codepoint,
+                self.display_buffers,
+                x_advance as isize,
+                y_advance as isize,
+                font::Mode::Bw).expect("Glyph not found");
+            x_advance += glyph.x_advance() as usize;
+        }
+
+        display.display(
+            self.display_buffers,
+            if self.full_refresh {
+                RefreshMode::Full
+            } else {
+                RefreshMode::Fast
+            },
+        );
+        self.display_buffers.clear(BinaryColor::Off).ok();
+
+        let mut x_advance = x_start;
+        let mut y_advance = 0usize;
+        y_advance += font.y_advance as usize;
+        for glyph in font.glyphs {
+            if (x_advance + glyph.x_advance() as usize) > x_end {
+                x_advance = x_start;
+                y_advance += font.y_advance as usize;
+            }
+            draw_glyph(
+                &font,
+                glyph.codepoint,
+                self.display_buffers,
+                x_advance as isize,
+                y_advance as isize,
+                font::Mode::Msb).expect("Glyph not found");
+            x_advance += glyph.x_advance() as usize;
+        }
+
+        display.copy_to_msb(self.display_buffers.get_active_buffer());
+        self.display_buffers.clear(BinaryColor::Off).ok();
+
+        let mut x_advance = x_start;
+        let mut y_advance = 0usize;
+        y_advance += font.y_advance as usize;
+        for glyph in font.glyphs {
+            if (x_advance + glyph.x_advance() as usize) > x_end {
+                x_advance = x_start;
+                y_advance += font.y_advance as usize;
+            }
+            draw_glyph(
+                &font,
+                glyph.codepoint,
+                self.display_buffers,
+                x_advance as isize,
+                y_advance as isize,
+                font::Mode::Lsb).expect("Glyph not found");
+            x_advance += glyph.x_advance() as usize;
+        }
+
+        display.copy_to_lsb(self.display_buffers.get_active_buffer());
+        display.display_differential_grayscale();
     }
 }
