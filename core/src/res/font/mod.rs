@@ -43,6 +43,32 @@ pub struct FontDefinition<'a> {
     pub bitmap_lsb: &'a [u8],
 }
 
+impl FontDefinition<'_> {
+    pub fn get_glyph(&self, codepoint: u16) -> Option<&Glyph> {
+        match self
+            .glyphs
+            .binary_search_by(|glyph| glyph.codepoint.cmp(&codepoint))
+        {
+            Ok(index) => Some(&self.glyphs[index]),
+            Err(_) => None,
+        }
+    }
+
+    pub fn codepoint_width(&self, codepoint: u16) -> Option<u8> {
+        self.get_glyph(codepoint).map(|glyph| glyph.x_advance())
+    }
+
+    pub fn char_width(&self, ch: char) -> Option<u8> {
+        self.codepoint_width(ch as u16)
+    }
+
+    pub fn word_width(&self, word: &str) -> u16 {
+        word.chars().fold(0u16, |acc, codepoint| {
+            acc + self.char_width(codepoint).unwrap_or(0) as u16
+        })
+    }
+}
+
 #[repr(C)]
 pub struct Glyph {
     pub codepoint: u16,
@@ -65,9 +91,9 @@ impl Glyph {
         assert!(height < 0x40);
         assert!(xmin >= -32 && xmin < 32);
         assert!(ymin >= -32 && ymin < 32);
-        let blob = ((x_advance as u32) << 26)
-            | ((width as u32) << 20)
-            | ((height as u32) << 14)
+        let blob = ((x_advance as u32) << 0x1A)
+            | ((width as u32) << 0x14)
+            | ((height as u32) << 0x0E)
             | (((xmin as i32 + 32) as u32) << 8)
             | ((ymin as i32 + 32) as u32);
         Self {

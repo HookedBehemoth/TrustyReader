@@ -1,5 +1,5 @@
 use argh::FromArgs;
-use image::{DynamicImage, ImageBuffer};
+use image::DynamicImage;
 use trusty_core::{
     container::xt,
     framebuffer::{BUFFER_SIZE, HEIGHT, WIDTH},

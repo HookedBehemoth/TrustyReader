@@ -117,7 +117,7 @@ async fn main(spawner: Spawner) {
     info!("wake reason: {:?}", wake_reason);
 
     esp_alloc::heap_allocator!(#[esp_hal::ram(reclaimed)] size: 0x10000);
-    esp_alloc::heap_allocator!(size: 300000);
+    esp_alloc::heap_allocator!(size: 290000);
 
     let sw_int = SoftwareInterruptControl::new(peripherals.SW_INTERRUPT);
     let timg0 = TimerGroup::new(peripherals.TIMG0);

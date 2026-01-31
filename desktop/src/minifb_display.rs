@@ -40,9 +40,9 @@ impl Default for MinifbDisplay {
             lsb_buffer: Box::new([0; BUFFER_SIZE]),
             msb_buffer: Box::new([0; BUFFER_SIZE]),
             display_buffer: Box::new([0; DISPLAY_BUFFER_SIZE]),
-            window: Self::create_window(Rotation::Rotate90, minifb::Scale::X2),
+            window: Self::create_window(Rotation::Rotate0, minifb::Scale::X2),
             buttons: ButtonState::default(),
-            internal_rotation: Rotation::Rotate90,
+            internal_rotation: Rotation::Rotate0,
             scale: minifb::Scale::X2,
         };
 
@@ -306,7 +306,7 @@ impl trusty_core::display::Display for MinifbDisplay {
         self.lsb_buffer.copy_from_slice(lsb);
         self.msb_buffer.copy_from_slice(msb);
     }
-    fn display_differential_grayscale(&mut self, turn_off_screen: bool) {
+    fn display_differential_grayscale(&mut self, _turn_off_screen: bool) {
         self.is_grayscale = true;
         self.blit_internal(BlitMode::Grayscale);
     }

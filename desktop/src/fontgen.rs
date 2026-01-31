@@ -1,8 +1,7 @@
 use embedded_graphics::prelude::OriginDimensions;
-use image::ImageFormat;
 use log::{info, trace, warn};
 use trusty_core::{
-    framebuffer::{BUFFER_SIZE, DisplayBuffers, HEIGHT, WIDTH},
+    framebuffer::{DisplayBuffers, HEIGHT, WIDTH},
     res::font::{FontDefinition, Glyph, Mode, draw_glyph},
 };
 

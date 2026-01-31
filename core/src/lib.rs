@@ -6,6 +6,7 @@ pub mod display;
 pub mod framebuffer;
 pub mod fs;
 pub mod input;
+pub mod layout;
 pub mod res;
 pub mod zip;
 
