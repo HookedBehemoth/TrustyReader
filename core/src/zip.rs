@@ -171,7 +171,7 @@ pub struct ZipEntryReader<'a, R: crate::fs::File> {
     compressed_remaining: usize,
     uncompressed_remaining: usize,
     // Inflate state for deflate decompression
-    inflater: Option<inflate::stream::InflateState>,
+    inflater: Option<Box<inflate::stream::InflateState>>,
     // Input buffer for compressed data
     in_buf: [u8; 512],
     in_buf_start: usize,
@@ -210,7 +210,7 @@ impl<'a, R: crate::fs::File> ZipEntryReader<'a, R> {
         }
 
         let inflater = if compression == 8 {
-            Some(inflate::stream::InflateState::new(DataFormat::Raw))
+            Some(Box::new(inflate::stream::InflateState::new(DataFormat::Raw)))
         } else {
             None
         };

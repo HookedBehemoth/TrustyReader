@@ -10,12 +10,15 @@
 pub mod adc_input;
 pub mod eink_display;
 pub mod sdspi_fs;
+pub mod sdspi_fatfs;
 
 use core::cell::RefCell;
 
 use crate::adc_input::*;
 use crate::eink_display::EInkDisplay;
-use crate::sdspi_fs::SdSpiFilesystem;
+use crate::sdspi_fatfs::FatFs;
+// use crate::sdspi_fs::SdSpiFilesystem;
+use trusty_core::fs::{Filesystem, Directory, DirEntry};
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use embassy_executor::Spawner;
@@ -120,7 +123,7 @@ async fn main(spawner: Spawner) {
     info!("wake reason: {:?}", wake_reason);
 
     esp_alloc::heap_allocator!(#[esp_hal::ram(reclaimed)] size: 0x10000);
-    esp_alloc::heap_allocator!(size: 290000);
+    esp_alloc::heap_allocator!(size: 280000);
 
     let sw_int = SoftwareInterruptControl::new(peripherals.SW_INTERRUPT);
     let timg0 = TimerGroup::new(peripherals.TIMG0);
@@ -146,7 +149,7 @@ async fn main(spawner: Spawner) {
         .with_sck(peripherals.GPIO8)
         .with_mosi(peripherals.GPIO10)
         .with_miso(peripherals.GPIO7);
-    let shared_spi = RefCell::new(spi);
+    let shared_spi: &'static RefCell<_> = Box::leak(Box::new(RefCell::new(spi)));
 
     info!("Setting up GPIO pins");
     let dc = Output::new(peripherals.GPIO4, Level::High, OutputConfig::default());
@@ -183,9 +186,21 @@ async fn main(spawner: Spawner) {
     let sdcard_spi = RefCellDevice::new(&shared_spi, sdcard_cs, delay)
         .expect("Failed to create SPI device for SD card");
 
-    let sdcard = SdSpiFilesystem::new_with_volume(sdcard_spi, delay)
-        .expect("Failed to create SD SPI filesystem");
-
+    // sdspi_fatfs::open(sdcard_spi, delay);
+    // sdspi_fatfs::test();
+    let mut sdcard = FatFs::new(sdcard_spi, delay);
+    // let sdcard = SdSpiFilesystem::new_with_volume(sdcard_spi, delay)
+    //     .expect("Failed to create SD SPI filesystem");
+    {
+        let mut dir = sdcard.open_directory("/").expect("root mount");
+        for entry in dir.list().expect("list") {
+            if entry.is_directory() {
+                info!("Dir: {} ", entry.name());
+            } else {
+                info!("File: {} ({} bytes)", entry.name(), entry.size());
+            }
+        }
+    }
     info!("Display complete! Starting rotation demo...");
     let mut application = Application::new(&mut display_buffers, sdcard);
 

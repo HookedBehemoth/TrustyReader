@@ -3,7 +3,7 @@ use embedded_graphics::{
     mono_font::{MonoTextStyle, ascii::FONT_10X20},
     pixelcolor::BinaryColor,
     prelude::{DrawTarget, OriginDimensions, Point, Primitive, Size},
-    primitives::{Circle, Line, PrimitiveStyle, Rectangle},
+    primitives::{Circle, PrimitiveStyle, Rectangle},
     text::Text,
 };
 use log::info;
@@ -110,7 +110,6 @@ where
         }
         self.dirty = false;
         match self.screen {
-            0 => self.draw_shapes(display),
             1 => self.draw_test_image(display),
             2 => self.draw_bebop(display),
             3 => self.draw_grayscale(display),
@@ -130,7 +129,7 @@ where
             17 => self.draw_layouted_text(display, &crate::res::font::bookerly_bold_italic_26::FONT),
             18 => self.draw_layouted_text(display, &crate::res::font::bookerly_bold_italic_28::FONT),
             19 => self.draw_layouted_text(display, &crate::res::font::bookerly_bold_italic_30::FONT),
-            _ => unreachable!(),
+            _ => self.draw_shapes(display),
         }
         self.full_refresh = false;
     }
