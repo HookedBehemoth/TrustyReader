@@ -44,7 +44,7 @@ fn generate_font(font_path: &str, sizes: &[f32], characters: &[char], out_path: 
 
     for &size in sizes {
         generate_font_size(&font, size, characters, out_path);
-        // analyze_font_metrics(&font, size);
+        analyze_font_metrics(&font, size);
     }
 }
 
@@ -178,7 +178,7 @@ fn generate_font_size(font: &fontdue::Font, font_size: f32, characters: &[char],
     ));
     std::fs::write(&rust_file, rust_code).expect("Failed to write Rust font file");
 
-    // test_font_drawing(&my_font);
+    test_font_drawing(&my_font);
 }
 
 fn test_font_drawing(font: &FontDefinition) {

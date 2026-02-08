@@ -29,19 +29,23 @@ pub struct DisplayBuffers {
 
 impl Default for DisplayBuffers {
     fn default() -> Self {
+        Self::with_rotation(Rotation::Rotate0)
+    }
+}
+
+impl DisplayBuffers {
+    pub fn with_rotation(rotation: Rotation) -> Self {
         // Clear screen to white
         let mut ret = Self {
             framebuffer: [[0; BUFFER_SIZE]; 2],
             active: false,
-            rotation: Rotation::Rotate0,
+            rotation: rotation,
         };
         ret.framebuffer[0].fill(0xFF);
         ret.framebuffer[1].fill(0xFF);
         ret
     }
-}
 
-impl DisplayBuffers {
     pub fn rotation(&self) -> Rotation {
         self.rotation
     }

@@ -1,6 +1,8 @@
 #![no_std]
 
+pub mod activities;
 pub mod application;
+pub mod battery;
 pub mod container;
 pub mod display;
 pub mod framebuffer;

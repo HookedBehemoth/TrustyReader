@@ -9,7 +9,6 @@
 
 pub mod adc_input;
 pub mod eink_display;
-pub mod sdspi_fs;
 pub mod sdspi_fatfs;
 
 use core::cell::RefCell;
@@ -17,8 +16,6 @@ use core::cell::RefCell;
 use crate::adc_input::*;
 use crate::eink_display::EInkDisplay;
 use crate::sdspi_fatfs::FatFs;
-// use crate::sdspi_fs::SdSpiFilesystem;
-use trusty_core::fs::{Filesystem, Directory, DirEntry};
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use embassy_executor::Spawner;
@@ -40,6 +37,7 @@ use log::info;
 use trusty_core::application::Application;
 use trusty_core::display::{Display, RefreshMode};
 use trusty_core::framebuffer::DisplayBuffers;
+use trusty_core::fs::{DirEntry, Directory, Filesystem};
 
 extern crate alloc;
 const MAX_BUFFER_SIZE: usize = 512;
@@ -120,7 +118,7 @@ async fn main(spawner: Spawner) {
     info!("wake reason: {:?}", wake_reason);
 
     esp_alloc::heap_allocator!(#[esp_hal::ram(reclaimed)] size: 0x10000);
-    esp_alloc::heap_allocator!(size: 280000);
+    esp_alloc::heap_allocator!(size: 270000);
 
     let mut flash = esp_storage::FlashStorage::new(peripherals.FLASH);
     verify_ota(&mut flash);
@@ -163,7 +161,7 @@ async fn main(spawner: Spawner) {
 
     info!("SPI initialized");
 
-    let mut display_buffers = Box::new(DisplayBuffers::default());
+    let mut display_buffers = Box::new(DisplayBuffers::with_rotation(trusty_core::framebuffer::Rotation::Rotate90));
 
     // Create E-Ink Display instance
     info!("Creating E-Ink Display driver");
@@ -176,6 +174,8 @@ async fn main(spawner: Spawner) {
     display.display(&mut display_buffers, RefreshMode::Full);
 
     let mut button_state = GpioButtonState::new(
+        peripherals.GPIO0,
+        peripherals.GPIO20,
         peripherals.GPIO1,
         peripherals.GPIO2,
         unsafe { peripherals.GPIO3.clone_unchecked() },
@@ -186,22 +186,9 @@ async fn main(spawner: Spawner) {
     let sdcard_spi = RefCellDevice::new(&shared_spi, sdcard_cs, delay)
         .expect("Failed to create SPI device for SD card");
 
-    // sdspi_fatfs::open(sdcard_spi, delay);
-    // sdspi_fatfs::test();
-    let mut sdcard = FatFs::new(sdcard_spi, delay);
-    // let sdcard = SdSpiFilesystem::new_with_volume(sdcard_spi, delay)
-    //     .expect("Failed to create SD SPI filesystem");
-    {
-        let mut dir = sdcard.open_directory("/").expect("root mount");
-        for entry in dir.list().expect("list") {
-            if entry.is_directory() {
-                info!("Dir: {} ", entry.name());
-            } else {
-                info!("File: {} ({} bytes)", entry.name(), entry.size());
-            }
-        }
-    }
-    info!("Display complete! Starting rotation demo...");
+    let sdcard = FatFs::new(sdcard_spi, delay);
+
+    info!("Display complete! Starting Application...");
     let mut application = Application::new(&mut display_buffers, sdcard);
 
     while application.running() {
@@ -209,12 +196,12 @@ async fn main(spawner: Spawner) {
 
         button_state.update();
         let buttons = button_state.get_buttons();
-        application.update(&buttons);
+        let charge = button_state.get_charge_state();
+        application.update(&buttons, charge);
         application.draw(&mut display);
     }
 
-    if application.ota_running()
-    {
+    if application.ota_running() {
         info!("OTA requested; switching boot partition");
         switch_ota(&mut flash);
     }
@@ -239,14 +226,17 @@ fn verify_ota(storage: &mut esp_storage::FlashStorage) {
 
     let current_state = ota.current_ota_state();
     info!("current image state {:?}", current_state);
-    info!("currently selected partition {:?}", ota.selected_partition());
+    info!(
+        "currently selected partition {:?}",
+        ota.selected_partition()
+    );
 
     match current_state {
         Ok(esp_bootloader_esp_idf::ota::OtaImageState::PendingVerify) => {
             info!("Verifying OTA partition...");
             ota.set_current_ota_state(esp_bootloader_esp_idf::ota::OtaImageState::Valid)
                 .unwrap();
-        },
+        }
         Ok(state) => info!("OTA partition in state {:?}", state),
         Err(e) => info!("OTA partition verification failed: {:?}", e),
     }
@@ -259,7 +249,10 @@ fn switch_ota(storage: &mut esp_storage::FlashStorage) -> ! {
         esp_bootloader_esp_idf::ota_updater::OtaUpdater::new(storage, &mut buffer).unwrap();
 
     info!("current image state {:?}", ota.current_ota_state());
-    info!("currently selected partition {:?}", ota.selected_partition());
+    info!(
+        "currently selected partition {:?}",
+        ota.selected_partition()
+    );
 
     ota.activate_next_partition().unwrap();
     ota.set_current_ota_state(esp_bootloader_esp_idf::ota::OtaImageState::New)

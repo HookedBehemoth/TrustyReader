@@ -22,14 +22,10 @@ impl ErrorType for StdFilesystem {
 type Result<T> = core::result::Result<T, embedded_io::ErrorKind>;
 
 impl trusty_core::fs::Filesystem for StdFilesystem {
-    type File<'a>
-        = StdFileReader
-    where
-        Self: 'a;
-    type Directory<'a>
-        = StdDirectory
-    where
-        Self: 'a;
+    type File
+        = StdFileReader;
+    type Directory
+        = StdDirectory;
 
     fn open_file(&self, path: &str, mode: Mode) -> Result<StdFileReader> {
         let path = self.base_path.join(path);
@@ -55,7 +51,7 @@ impl trusty_core::fs::Filesystem for StdFilesystem {
         }
     }
 
-    fn open_directory(&self, path: &str) -> std::result::Result<Self::Directory<'_>, Self::Error> {
+    fn open_directory(&self, path: &str) -> std::result::Result<Self::Directory, Self::Error> {
         info!("Opening directory at path: {}", path);
         let path = self.base_path.join(path);
         if path.exists() == false || !path.is_dir() {
@@ -66,10 +62,10 @@ impl trusty_core::fs::Filesystem for StdFilesystem {
 
     fn open_file_entry(
         &self,
-        dir: &Self::Directory<'_>,
+        dir: &Self::Directory,
         entry: &StdDirEntry,
         mode: Mode,
-    ) -> std::result::Result<Self::File<'_>, Self::Error> {
+    ) -> std::result::Result<Self::File, Self::Error> {
         let path = dir.path.join(entry.name());
         let path = path.to_str().ok_or(embedded_io::ErrorKind::InvalidInput)?;
         self.open_file(path, mode)

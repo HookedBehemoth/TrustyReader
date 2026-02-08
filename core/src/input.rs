@@ -1,4 +1,5 @@
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub enum Buttons {
     Back,
     Confirm,
@@ -46,5 +47,10 @@ impl ButtonState {
     pub fn is_released(&self, button: Buttons) -> bool {
         let mask = 1 << (button as u8);
         (self.released() & mask) != 0
+    }
+
+    pub fn any_pressed(&self, buttons: &[Buttons]) -> bool {
+        let mask = buttons.iter().fold(0, |acc, &button| acc | (1 << (button as u8)));
+        (self.pressed() & mask) != 0
     }
 }

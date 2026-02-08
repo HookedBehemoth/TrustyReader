@@ -3,7 +3,7 @@ use core::{
     fmt::{Error, Write},
 };
 
-use alloc::{slice, vec, vec::Vec};
+use alloc::{slice, vec::Vec};
 use embedded_hal_bus::spi::RefCellDevice;
 use embedded_io::{ErrorType, Read, Seek, SeekFrom};
 use embedded_sdmmc::{Block, BlockDevice, BlockIdx, SdCard};
@@ -11,7 +11,7 @@ use esp_hal::Blocking;
 use esp_hal::delay::Delay;
 use esp_hal::gpio::Output;
 use esp_hal::spi::master::Spi;
-use log::{info, trace};
+use log::trace;
 use trusty_core::fs::{Filesystem, Mode};
 
 pub type BYTE = u8;
@@ -318,19 +318,15 @@ impl ErrorType for FatFs {
 }
 
 impl Filesystem for FatFs {
-    type Directory<'a>
-        = DirectoryEntry<'a>
-    where
-        Self: 'a;
-    type File<'a>
-        = FileEntry<'a>
-    where
-        Self: 'a;
+    type Directory
+        = DirectoryEntry;
+    type File
+        = FileEntry;
     fn open_file(
         &self,
         path: &str,
         mode: trusty_core::fs::Mode,
-    ) -> Result<Self::File<'_>, Self::Error> {
+    ) -> Result<Self::File, Self::Error> {
         let path = null_terminate(path);
         let mode = match mode {
             Mode::Read => 1,
@@ -344,7 +340,6 @@ impl Filesystem for FatFs {
                 Err(res)
             } else {
                 Ok(FileEntry {
-                    _marker: core::marker::PhantomData,
                     f,
                 })
             }
@@ -359,7 +354,7 @@ impl Filesystem for FatFs {
         let path = null_terminate(path);
         Ok(unsafe { ff_exists(path.as_ptr()) })
     }
-    fn open_directory(&self, path: &str) -> Result<Self::Directory<'_>, Self::Error> {
+    fn open_directory(&self, path: &str) -> Result<Self::Directory, Self::Error> {
         let path = null_terminate(path);
         unsafe {
             let mut d: DIR = core::mem::zeroed();
@@ -368,7 +363,6 @@ impl Filesystem for FatFs {
                 Err(res)
             } else {
                 Ok(DirectoryEntry {
-                    _marker: core::marker::PhantomData,
                     d,
                 })
             }
@@ -376,10 +370,10 @@ impl Filesystem for FatFs {
     }
     fn open_file_entry(
         &self,
-        _dir: &Self::Directory<'_>,
-        entry: &<<Self as Filesystem>::Directory<'_> as trusty_core::fs::Directory>::Entry,
+        _dir: &Self::Directory,
+        entry: &<<Self as Filesystem>::Directory as trusty_core::fs::Directory>::Entry,
         mode: Mode,
-    ) -> Result<Self::File<'_>, Self::Error> {
+    ) -> Result<Self::File, Self::Error> {
         // Build path from directory and entry name
         let name = &entry.name;
         self.open_file(name, mode)
@@ -422,12 +416,11 @@ impl trusty_core::fs::DirEntry for DirEntry {
     }
 }
 
-pub struct DirectoryEntry<'a> {
-    _marker: core::marker::PhantomData<&'a ()>,
+pub struct DirectoryEntry {
     d: DIR,
 }
 
-impl Drop for DirectoryEntry<'_> {
+impl Drop for DirectoryEntry {
     fn drop(&mut self) {
         unsafe {
             f_closedir(&mut self.d as *mut DIR);
@@ -435,11 +428,11 @@ impl Drop for DirectoryEntry<'_> {
     }
 }
 
-impl ErrorType for DirectoryEntry<'_> {
+impl ErrorType for DirectoryEntry {
     type Error = FRESULT;
 }
 
-impl trusty_core::fs::Directory for DirectoryEntry<'_> {
+impl trusty_core::fs::Directory for DirectoryEntry {
     type Entry = DirEntry;
 
     fn list(&self) -> Result<Vec<Self::Entry>, Self::Error> {
@@ -464,16 +457,15 @@ impl trusty_core::fs::Directory for DirectoryEntry<'_> {
     }
 }
 
-pub struct FileEntry<'a> {
-    _marker: core::marker::PhantomData<&'a ()>,
+pub struct FileEntry {
     f: FIL,
 }
 
-impl ErrorType for FileEntry<'_> {
+impl ErrorType for FileEntry {
     type Error = FRESULT;
 }
 
-impl Read for FileEntry<'_> {
+impl Read for FileEntry {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
         let mut bytes_read: UINT = 0;
         let res = unsafe {
@@ -492,7 +484,7 @@ impl Read for FileEntry<'_> {
     }
 }
 
-impl Write for FileEntry<'_> {
+impl Write for FileEntry {
     fn write_str(&mut self, s: &str) -> Result<(), Error> {
         let mut bytes_written: UINT = 0;
         let res = unsafe {
@@ -507,7 +499,7 @@ impl Write for FileEntry<'_> {
     }
 }
 
-impl embedded_io::Write for FileEntry<'_> {
+impl embedded_io::Write for FileEntry {
     fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
         let mut bytes_written: UINT = 0;
         let res = unsafe {
@@ -531,7 +523,7 @@ impl embedded_io::Write for FileEntry<'_> {
     }
 }
 
-impl Seek for FileEntry<'_> {
+impl Seek for FileEntry {
     fn seek(&mut self, pos: SeekFrom) -> Result<u64, Self::Error> {
         let new_pos = match pos {
             SeekFrom::Start(offset) => offset,
@@ -549,7 +541,7 @@ impl Seek for FileEntry<'_> {
     }
 }
 
-impl trusty_core::fs::File for FileEntry<'_> {
+impl trusty_core::fs::File for FileEntry {
     fn size(&self) -> usize {
         self.f.obj.objsize as usize
     }

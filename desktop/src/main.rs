@@ -1,3 +1,4 @@
+use trusty_core::battery::ChargeState;
 use trusty_core::fs::Filesystem;
 use trusty_core::{application::Application, framebuffer::DisplayBuffers, zip};
 
@@ -16,10 +17,14 @@ fn main() {
     let mut display = MinifbDisplay::default();
     let fs = StdFilesystem::new_with_base_path("sd".into());
     let mut application = Application::new(&mut display_buffers, fs);
+    let charge = ChargeState {
+        level: 75,
+        charging: true,
+    };
 
     while display.is_open() {
         display.update();
-        application.update(&display.get_buttons());
+        application.update(&display.get_buttons(), charge);
         application.draw(&mut display);
     }
 

@@ -10,21 +10,17 @@ pub enum Mode {
 }
 
 pub trait Filesystem: ErrorType {
-    type File<'a>: File
-    where
-        Self: 'a;
-    type Directory<'a>: Directory
-    where
-        Self: 'a;
+    type File: File;
+    type Directory: Directory;
 
-    fn open_file(&self, path: &str, mode: Mode) -> Result<Self::File<'_>, Self::Error>;
+    fn open_file(&self, path: &str, mode: Mode) -> Result<Self::File, Self::Error>;
     fn open_file_entry(
         &self,
-        dir: &Self::Directory<'_>,
-        entry: &<<Self as Filesystem>::Directory<'_> as Directory>::Entry,
+        dir: &Self::Directory,
+        entry: &<<Self as Filesystem>::Directory as Directory>::Entry,
         mode: Mode,
-    ) -> Result<Self::File<'_>, Self::Error>;
-    fn open_directory(&self, path: &str) -> Result<Self::Directory<'_>, Self::Error>;
+    ) -> Result<Self::File, Self::Error>;
+    fn open_directory(&self, path: &str) -> Result<Self::Directory, Self::Error>;
     fn exists(&self, path: &str) -> Result<bool, Self::Error>;
     fn create_dir_all(&self, path: &str) -> Result<(), Self::Error>;
 }
@@ -57,7 +53,7 @@ pub trait Directory: ErrorType {
     fn list(&self) -> Result<Vec<Self::Entry>, Self::Error>;
 }
 
-pub trait DirEntry {
+pub trait DirEntry: Sized + 'static {
     fn name(&self) -> &str;
     fn is_directory(&self) -> bool;
     fn size(&self) -> usize;
