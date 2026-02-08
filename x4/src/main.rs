@@ -111,9 +111,6 @@ async fn main(spawner: Spawner) {
     let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
     let peripherals = esp_hal::init(config);
 
-    let mut flash = esp_storage::FlashStorage::new(peripherals.FLASH);
-    verify_ota(&mut flash);
-
     let mut rtc = Rtc::new(peripherals.LPWR);
 
     info!("up and runnning!");
@@ -124,6 +121,9 @@ async fn main(spawner: Spawner) {
 
     esp_alloc::heap_allocator!(#[esp_hal::ram(reclaimed)] size: 0x10000);
     esp_alloc::heap_allocator!(size: 280000);
+
+    let mut flash = esp_storage::FlashStorage::new(peripherals.FLASH);
+    verify_ota(&mut flash);
 
     let sw_int = SoftwareInterruptControl::new(peripherals.SW_INTERRUPT);
     let timg0 = TimerGroup::new(peripherals.TIMG0);
@@ -232,7 +232,7 @@ async fn main(spawner: Spawner) {
 }
 
 fn verify_ota(storage: &mut esp_storage::FlashStorage) {
-    let mut buffer = [0u8; esp_bootloader_esp_idf::partitions::PARTITION_TABLE_MAX_LEN];
+    let mut buffer = Box::new([0u8; esp_bootloader_esp_idf::partitions::PARTITION_TABLE_MAX_LEN]);
 
     let mut ota =
         esp_bootloader_esp_idf::ota_updater::OtaUpdater::new(storage, &mut buffer).unwrap();
@@ -253,7 +253,7 @@ fn verify_ota(storage: &mut esp_storage::FlashStorage) {
 }
 
 fn switch_ota(storage: &mut esp_storage::FlashStorage) -> ! {
-    let mut buffer = [0u8; esp_bootloader_esp_idf::partitions::PARTITION_TABLE_MAX_LEN];
+    let mut buffer = Box::new([0u8; esp_bootloader_esp_idf::partitions::PARTITION_TABLE_MAX_LEN]);
 
     let mut ota =
         esp_bootloader_esp_idf::ota_updater::OtaUpdater::new(storage, &mut buffer).unwrap();
