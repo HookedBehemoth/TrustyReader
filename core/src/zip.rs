@@ -309,6 +309,7 @@ impl<'a, R: crate::fs::File> ZipEntryReader<'a, R> {
 
             self.in_buf_start += result.bytes_consumed;
             total_out += result.bytes_written;
+            log::trace!("Inflate result: {:?}, bytes consumed: {}, bytes written: {}", result.status, result.bytes_consumed, result.bytes_written);
 
             match inflater.last_status() {
                 TINFLStatus::Done => {
@@ -322,8 +323,11 @@ impl<'a, R: crate::fs::File> ZipEntryReader<'a, R> {
                     // Continue loop to read more input
                 }
                 TINFLStatus::HasMoreOutput => {
-                    // Output buffer is full, return what we have
-                    break;
+                    if out_slice.is_empty() {
+                        break;
+                    } else {
+                        continue;
+                    }
                 }
                 _ => {
                     return Err(ZipError::DecompressionError);
