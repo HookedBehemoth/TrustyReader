@@ -6,9 +6,10 @@ use crate::{
 };
 
 pub mod demo;
-pub mod home;
-pub mod settings;
 pub mod filebrowser;
+pub mod home;
+pub mod reader;
+pub mod settings;
 
 pub type Path = heapless::String<256>;
 
@@ -23,10 +24,15 @@ pub enum ActivityType {
 
 impl ActivityType {
     pub fn home() -> Self {
-        ActivityType::Home { state: home::Focus::FileBrowser }
+        ActivityType::Home {
+            state: home::Focus::FileBrowser,
+        }
     }
     pub fn file_browser() -> Self {
-        ActivityType::FileBrowser { focus: 0, path: heapless::String::new() }
+        ActivityType::FileBrowser {
+            focus: 0,
+            path: heapless::String::new(),
+        }
     }
 }
 
@@ -35,7 +41,10 @@ pub enum UpdateResult {
     Redraw,
     SetRotation(Rotation),
     PopActivity,
-    PushActivity { current: ActivityType, next: ActivityType },
+    PushActivity {
+        current: ActivityType,
+        next: ActivityType,
+    },
     Ota,
 }
 

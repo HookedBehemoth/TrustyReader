@@ -151,6 +151,17 @@ pub enum ZipError {
     InvalidData,
 }
 
+impl embedded_io::Error for ZipError {
+    fn kind(&self) -> embedded_io::ErrorKind {
+        match self {
+            ZipError::IoError => embedded_io::ErrorKind::Other,
+            ZipError::InvalidSignature | ZipError::InvalidData => embedded_io::ErrorKind::InvalidData,
+            ZipError::UnsupportedCompression => embedded_io::ErrorKind::Unsupported,
+            ZipError::DecompressionError => embedded_io::ErrorKind::Other,
+        }
+    }
+}
+
 impl core::fmt::Display for ZipError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
@@ -176,7 +187,6 @@ pub struct ZipEntryReader<'a, R: crate::fs::File> {
     in_buf: [u8; 512],
     in_buf_start: usize,
     in_buf_end: usize,
-    finished: bool,
 }
 
 impl<'a, R: crate::fs::File> ZipEntryReader<'a, R> {
@@ -224,7 +234,6 @@ impl<'a, R: crate::fs::File> ZipEntryReader<'a, R> {
             in_buf: [0u8; 512],
             in_buf_start: 0,
             in_buf_end: 0,
-            finished: false,
         })
     }
 
@@ -233,15 +242,10 @@ impl<'a, R: crate::fs::File> ZipEntryReader<'a, R> {
         self.uncompressed_remaining
     }
 
-    /// Returns true if all data has been read
-    pub fn is_finished(&self) -> bool {
-        self.finished
-    }
-
     /// Read decompressed data into the provided buffer.
     /// Returns the number of bytes written to the buffer.
     pub fn read(&mut self, out_buf: &mut [u8]) -> Result<usize, ZipError> {
-        if self.finished || out_buf.is_empty() {
+        if out_buf.is_empty() {
             return Ok(0);
         }
 
@@ -256,7 +260,6 @@ impl<'a, R: crate::fs::File> ZipEntryReader<'a, R> {
     fn read_stored(&mut self, out_buf: &mut [u8]) -> Result<usize, ZipError> {
         let to_read = core::cmp::min(out_buf.len(), self.compressed_remaining);
         if to_read == 0 {
-            self.finished = true;
             return Ok(0);
         }
 
@@ -267,10 +270,6 @@ impl<'a, R: crate::fs::File> ZipEntryReader<'a, R> {
 
         self.compressed_remaining -= read;
         self.uncompressed_remaining -= read;
-
-        if self.compressed_remaining == 0 {
-            self.finished = true;
-        }
 
         Ok(read)
     }
@@ -313,7 +312,6 @@ impl<'a, R: crate::fs::File> ZipEntryReader<'a, R> {
 
             match inflater.last_status() {
                 TINFLStatus::Done => {
-                    self.finished = true;
                     break;
                 }
                 TINFLStatus::NeedsMoreInput => {
@@ -343,7 +341,7 @@ impl<'a, R: crate::fs::File> ZipEntryReader<'a, R> {
         let mut result = vec![0u8; self.uncompressed_remaining];
         let mut offset = 0;
 
-        while !self.finished && offset < result.len() {
+        while offset < result.len() {
             let read = self.read(&mut result[offset..])?;
             if read == 0 {
                 break;
@@ -363,4 +361,14 @@ pub fn read_entry<Reader: crate::fs::File>(
 ) -> Result<Vec<u8>, ZipError> {
     let entry_reader = ZipEntryReader::new(reader, entry)?;
     entry_reader.read_to_end()
+}
+
+impl<Reader: crate::fs::File> embedded_io::ErrorType for ZipEntryReader<'_, Reader> {
+    type Error = ZipError;
+}
+
+impl<Reader: crate::fs::File> embedded_io::Read for ZipEntryReader<'_, Reader> {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+        self.read(buf)
+    }
 }

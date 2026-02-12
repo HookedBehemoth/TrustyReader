@@ -2,14 +2,15 @@ use alloc::boxed::Box;
 
 use log::info;
 
-use crate::activities::{ActivityType, home};
 use crate::activities::demo::DemoActivity;
 use crate::activities::filebrowser::FileBrowser;
 use crate::activities::home::HomeActivity;
 use crate::activities::settings::SettingsActivity;
+use crate::activities::{ActivityType, home};
 
 use crate::display::RefreshMode;
 use crate::res::img::bebop;
+use crate::zip;
 use crate::{
     activities::{Activity, ApplicationState},
     battery::ChargeState,
@@ -37,7 +38,6 @@ where
     Filesystem: crate::fs::Filesystem,
 {
     pub fn new(display_buffers: &'a mut DisplayBuffers, filesystem: Filesystem) -> Self {
-
         let activity_type = ActivityType::home();
         let activity = Box::new(HomeActivity::new(home::Focus::FileBrowser));
 
@@ -133,8 +133,24 @@ where
             ActivityType::Settings => Box::new(SettingsActivity::new()),
             ActivityType::Demo => Box::new(DemoActivity::new()),
             // ActivityType::Reader { path } => Box::new(crate::activities::reader::ReaderActivity::new(path)),
-            ActivityType::Reader { path } => unreachable!("TODO: Reader ({path})"),
+            // ActivityType::Reader { path } => unreachable!("TODO: Reader ({path})"),
+            ActivityType::Reader { path } => {
+                let mut file = self
+                    .filesystem
+                    .open_file(path, crate::fs::Mode::Read)
+                    .unwrap();
+                let zip = zip::parse_zip(&mut file).unwrap();
+                for entry in &zip {
+                    // info!("Zip entry: {}", &entry.name);
+                    if entry.name.ends_with(".ncx") {
+                        let mut reader = zip::ZipEntryReader::new(&mut file, entry).unwrap();
+                        let _ncx = crate::container::epub::ncx::parse(&mut reader, entry.size as usize).unwrap();
+                        // info!("Parsed NCX: {:?}", ncx);
+                    }
+                }
+                Box::new(crate::activities::reader::ReaderActivity {})
+                // unreachable!("TODO: Reader ({path})");
+            }
         }
     }
-
 }
