@@ -10,8 +10,8 @@ macro_rules! trace {
     };
 }
 
-pub struct XmlParser<'a, R, const BUFFER_SIZE: usize> {
-    reader: &'a mut R,
+pub struct XmlParser<R, const BUFFER_SIZE: usize> {
+    reader: R,
     remaining: usize,
     buffer: [u8; BUFFER_SIZE],
     pos: usize,
@@ -50,8 +50,8 @@ impl From<core::str::Utf8Error> for XmlError {
     }
 }
 
-impl<R: embedded_io::Read, const BUFFER_SIZE: usize> XmlParser<'_, R, BUFFER_SIZE> {
-    pub fn new<'a>(reader: &'a mut R, total: usize) -> Result<XmlParser<'a, R, BUFFER_SIZE>> {
+impl<R: embedded_io::Read, const BUFFER_SIZE: usize> XmlParser<R, BUFFER_SIZE> {
+    pub fn new(mut reader: R, total: usize) -> Result<XmlParser<R, BUFFER_SIZE>> {
         let mut buffer = [0; BUFFER_SIZE];
         let end = reader
             .read(&mut buffer)
@@ -307,7 +307,7 @@ mod tests {
     use super::*;
     use alloc::string::String;
 
-    type ContentParser<'a, R> = XmlParser<'a, R, 2048>;
+    type ContentParser<R> = XmlParser<R, 2048>;
 
     fn walk(xml: &str) {
         let mut bytes = xml.as_bytes();
@@ -396,7 +396,7 @@ mod tests {
         unt ut labore et dolore magna aliquyam erat, sed diam voluptua. \
         At vero eos et accusam et justo duo dolores et ea rebum. Stet cl";
 
-    type Parser<'a, R> = XmlParser<'a, R, 256>;
+    type Parser<R> = XmlParser<R, 256>;
 
     #[test]
     fn test_window() {
@@ -431,7 +431,7 @@ mod tests {
     #[test]
     fn test_find() {
         fn find_str<'a>(
-            parser: &'a mut Parser<'_, &'_ [u8]>,
+            parser: &'a mut Parser<&'_ [u8]>,
             n_start: &str,
             n_end: &str,
         ) -> Result<&'a str> {
@@ -440,8 +440,8 @@ mod tests {
         }
 
         let data = LOREM.as_bytes();
-        let mut buffer = data;
-        let mut parser = Parser::new(&mut buffer, data.len()).unwrap();
+        let buffer = data;
+        let mut parser = Parser::new(buffer, data.len()).unwrap();
         let ipsum = find_str(&mut parser, "Lorem ", " dolor").unwrap();
         assert_eq!(ipsum, "ipsum");
         let aliquyam = find_str(&mut parser, "no sea takimata ", " ctus est").unwrap();
