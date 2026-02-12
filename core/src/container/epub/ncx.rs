@@ -1,11 +1,9 @@
+use crate::container::xml;
 use alloc::{borrow::ToOwned, boxed::Box, string::String};
 use embedded_io::Read;
 use log::{info, trace};
-use crate::container::xml;
 
-pub struct Ncx {
-
-}
+pub struct Ncx {}
 
 pub fn parse(reader: &mut impl Read, size: usize) -> Result<Ncx, xml::XmlError> {
     let mut parser = Box::new(xml::XmlParser::<_, 1024>::new(reader, size)?);
@@ -13,9 +11,9 @@ pub fn parse(reader: &mut impl Read, size: usize) -> Result<Ncx, xml::XmlError> 
     let mut nav_counter = 0;
     let mut stack = heapless::Vec::<String, 16>::new();
     loop {
-        let event = parser.next()?;
+        let event = parser.next_event()?;
         trace!("Event: {event:?}");
-        
+
         match event {
             xml::XmlEvent::StartElement => {
                 let name = parser.name()?;

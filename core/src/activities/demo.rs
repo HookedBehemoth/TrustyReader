@@ -203,7 +203,7 @@ impl DemoActivity {
                 y_advance += font.y_advance as usize;
             }
             font::draw_glyph(
-                &font,
+                font,
                 glyph.codepoint,
                 buffers,
                 x_advance as isize,
@@ -233,7 +233,7 @@ impl DemoActivity {
                 y_advance += font.y_advance as usize;
             }
             font::draw_glyph(
-                &font,
+                font,
                 glyph.codepoint,
                 buffers,
                 x_advance as isize,
@@ -256,7 +256,7 @@ impl DemoActivity {
                 y_advance += font.y_advance as usize;
             }
             font::draw_glyph(
-                &font,
+                font,
                 glyph.codepoint,
                 buffers,
                 x_advance as isize,
@@ -339,7 +339,7 @@ impl DemoActivity {
                 x_advance = x_start + word.x;
                 for codepoint in word.text.chars() {
                     if let Ok(glyph_width) = font::draw_glyph(
-                        &font,
+                        font,
                         codepoint as _,
                         display_buffers,
                         x_advance as isize,
@@ -364,7 +364,7 @@ impl DemoActivity {
             }
             if line.hyphenated {
                 font::draw_glyph(
-                    &font,
+                    font,
                     '-' as _,
                     display_buffers,
                     x_advance as isize,

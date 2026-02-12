@@ -31,17 +31,29 @@ impl core::ops::Deref for WrappingNumber {
 impl WrappingNumber {
     fn next(&self) -> Self {
         if self.value < self.max {
-            Self { value: self.value + 1, max: self.max }
+            Self {
+                value: self.value + 1,
+                max: self.max,
+            }
         } else {
-            Self { value: 0, max: self.max }
+            Self {
+                value: 0,
+                max: self.max,
+            }
         }
     }
 
     fn prev(&self) -> Self {
         if self.value > 0 {
-            Self { value: self.value - 1, max: self.max }
+            Self {
+                value: self.value - 1,
+                max: self.max,
+            }
         } else {
-            Self { value: self.max, max: self.max }
+            Self {
+                value: self.max,
+                max: self.max,
+            }
         }
     }
 }
@@ -54,7 +66,10 @@ pub struct FileBrowser<Entry: crate::fs::DirEntry> {
 
 impl<FileEntry: crate::fs::DirEntry> FileBrowser<FileEntry> {
     pub fn new(path: Path, entries: Vec<FileEntry>, focus: u8) -> Self {
-        let focus = WrappingNumber { value: focus, max: entries.len() as u8 - 1 };
+        let focus = WrappingNumber {
+            value: focus,
+            max: entries.len() as u8 - 1,
+        };
         Self {
             path,
             entries,
@@ -80,7 +95,7 @@ impl<FileEntry: crate::fs::DirEntry> super::Activity for FileBrowser<FileEntry> 
             super::UpdateResult::Redraw
         } else if buttons.is_pressed(Buttons::Confirm) {
             let entry = &self.entries[*self.focus as usize];
-            let separator = if self.path.len() > 0 { "/" } else { "" };
+            let separator = if self.path.is_empty() { "/" } else { "" };
             let Ok(path) = heapless::format!("{}{separator}{}", self.path, entry.name()) else {
                 info!(
                     "Failed to construct path for {} + {}",

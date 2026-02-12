@@ -7,7 +7,10 @@ use embedded_graphics::{
 };
 
 use crate::{
-    battery::ChargeState, display::{Display, RefreshMode}, framebuffer::DisplayBuffers, input::Buttons
+    battery::ChargeState,
+    display::{Display, RefreshMode},
+    framebuffer::DisplayBuffers,
+    input::Buttons,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, rotate_enum::RotateEnum, strum_macros::EnumIter)]
@@ -34,7 +37,10 @@ pub struct HomeActivity {
 
 impl HomeActivity {
     pub fn new(focus: Focus) -> Self {
-        Self { focus, charge: ChargeState::default() }
+        Self {
+            focus,
+            charge: ChargeState::default(),
+        }
     }
 }
 
@@ -54,9 +60,18 @@ impl super::Activity for HomeActivity {
         } else if buttons.is_pressed(Buttons::Confirm) {
             let current = super::ActivityType::Home { state: self.focus };
             match self.focus {
-                Focus::FileBrowser => super::UpdateResult::PushActivity { current, next: super::ActivityType::file_browser() },
-                Focus::Demo => super::UpdateResult::PushActivity { current, next: super::ActivityType::Demo },
-                Focus::Settings => super::UpdateResult::PushActivity { current, next: super::ActivityType::Settings },
+                Focus::FileBrowser => super::UpdateResult::PushActivity {
+                    current,
+                    next: super::ActivityType::file_browser(),
+                },
+                Focus::Demo => super::UpdateResult::PushActivity {
+                    current,
+                    next: super::ActivityType::Demo,
+                },
+                Focus::Settings => super::UpdateResult::PushActivity {
+                    current,
+                    next: super::ActivityType::Settings,
+                },
             }
         } else if state.charge != self.charge {
             self.charge = state.charge;
@@ -75,7 +90,7 @@ impl super::Activity for HomeActivity {
             .draw(buffers)
             .ok();
 
-        for option in [ Focus::FileBrowser, Focus::Demo, Focus::Settings] {
+        for option in [Focus::FileBrowser, Focus::Demo, Focus::Settings] {
             Text::new(
                 option.label(),
                 Point::new(20, 60 + (option as i32) * 30),

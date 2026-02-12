@@ -68,7 +68,7 @@ where
         }
 
         let state = ApplicationState {
-            input: buttons.clone(),
+            input: *buttons,
             charge,
             rotation: self.display_buffers.rotation(),
         };
@@ -111,7 +111,7 @@ where
             return;
         }
         info!("Drawing activity");
-        self.activity.draw(display, &mut self.display_buffers);
+        self.activity.draw(display, self.display_buffers);
         self.dirty = false;
     }
 
@@ -126,7 +126,7 @@ where
         match activity_type {
             ActivityType::Home { state } => Box::new(HomeActivity::new(*state)),
             ActivityType::FileBrowser { focus, path } => {
-                let dir = self.filesystem.open_directory(&path).unwrap();
+                let dir = self.filesystem.open_directory(path).unwrap();
                 let entries = dir.list().unwrap();
                 Box::new(FileBrowser::new(path.clone(), entries, *focus))
             }
@@ -144,7 +144,9 @@ where
                     // info!("Zip entry: {}", &entry.name);
                     if entry.name.ends_with(".ncx") {
                         let mut reader = zip::ZipEntryReader::new(&mut file, entry).unwrap();
-                        let _ncx = crate::container::epub::ncx::parse(&mut reader, entry.size as usize).unwrap();
+                        let _ncx =
+                            crate::container::epub::ncx::parse(&mut reader, entry.size as usize)
+                                .unwrap();
                         // info!("Parsed NCX: {:?}", ncx);
                     }
                 }

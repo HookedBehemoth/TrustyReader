@@ -6,6 +6,10 @@ impl super::Activity for ReaderActivity {
     fn update(&mut self, _state: &super::ApplicationState) -> crate::activities::UpdateResult {
         crate::activities::UpdateResult::PopActivity
     }
-    fn draw(&mut self, _display: &mut dyn crate::display::Display, _buffers: &mut crate::framebuffer::DisplayBuffers) {
+    fn draw(
+        &mut self,
+        _display: &mut dyn crate::display::Display,
+        _buffers: &mut crate::framebuffer::DisplayBuffers,
+    ) {
     }
 }

@@ -50,7 +50,9 @@ impl ButtonState {
     }
 
     pub fn any_pressed(&self, buttons: &[Buttons]) -> bool {
-        let mask = buttons.iter().fold(0, |acc, &button| acc | (1 << (button as u8)));
+        let mask = buttons
+            .iter()
+            .fold(0, |acc, &button| acc | (1 << (button as u8)));
         (self.pressed() & mask) != 0
     }
 }

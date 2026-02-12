@@ -65,8 +65,8 @@ pub fn layout_text<'a>(options: Options<'a>, text: &'a str) -> Vec<Line<'a>> {
         hyphenated: false,
     };
 
-    let mut words = text.split_whitespace();
-    while let Some(mut word) = words.next() {
+    let words = text.split_whitespace();
+    for mut word in words {
         let mut word_width = options.font.word_width(word);
 
         // add space before the word

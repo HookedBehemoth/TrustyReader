@@ -9,7 +9,8 @@ use strum::IntoEnumIterator;
 
 use crate::{
     display::{Display, RefreshMode},
-    framebuffer::DisplayBuffers, input::Buttons,
+    framebuffer::DisplayBuffers,
+    input::Buttons,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, rotate_enum::RotateEnum, strum_macros::EnumIter)]
@@ -31,7 +32,9 @@ pub struct SettingsActivity {
 
 impl SettingsActivity {
     pub fn new() -> Self {
-        Self { focus: Focus::SwitchOta }
+        Self {
+            focus: Focus::SwitchOta,
+        }
     }
 
     pub fn select(&mut self) -> super::UpdateResult {

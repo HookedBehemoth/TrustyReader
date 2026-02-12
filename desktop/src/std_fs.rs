@@ -22,10 +22,8 @@ impl ErrorType for StdFilesystem {
 type Result<T> = core::result::Result<T, embedded_io::ErrorKind>;
 
 impl trusty_core::fs::Filesystem for StdFilesystem {
-    type File
-        = StdFileReader;
-    type Directory
-        = StdDirectory;
+    type File = StdFileReader;
+    type Directory = StdDirectory;
 
     fn open_file(&self, path: &str, mode: Mode) -> Result<StdFileReader> {
         let path = self.base_path.join(path);

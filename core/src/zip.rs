@@ -155,7 +155,9 @@ impl embedded_io::Error for ZipError {
     fn kind(&self) -> embedded_io::ErrorKind {
         match self {
             ZipError::IoError => embedded_io::ErrorKind::Other,
-            ZipError::InvalidSignature | ZipError::InvalidData => embedded_io::ErrorKind::InvalidData,
+            ZipError::InvalidSignature | ZipError::InvalidData => {
+                embedded_io::ErrorKind::InvalidData
+            }
             ZipError::UnsupportedCompression => embedded_io::ErrorKind::Unsupported,
             ZipError::DecompressionError => embedded_io::ErrorKind::Other,
         }
@@ -220,7 +222,9 @@ impl<'a, R: crate::fs::File> ZipEntryReader<'a, R> {
         }
 
         let inflater = if compression == 8 {
-            Some(Box::new(inflate::stream::InflateState::new(DataFormat::Raw)))
+            Some(Box::new(inflate::stream::InflateState::new(
+                DataFormat::Raw,
+            )))
         } else {
             None
         };
@@ -309,7 +313,12 @@ impl<'a, R: crate::fs::File> ZipEntryReader<'a, R> {
 
             self.in_buf_start += result.bytes_consumed;
             total_out += result.bytes_written;
-            log::trace!("Inflate result: {:?}, bytes consumed: {}, bytes written: {}", result.status, result.bytes_consumed, result.bytes_written);
+            log::trace!(
+                "Inflate result: {:?}, bytes consumed: {}, bytes written: {}",
+                result.status,
+                result.bytes_consumed,
+                result.bytes_written
+            );
 
             match inflater.last_status() {
                 TINFLStatus::Done => {

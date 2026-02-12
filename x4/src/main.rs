@@ -161,7 +161,9 @@ async fn main(spawner: Spawner) {
 
     info!("SPI initialized");
 
-    let mut display_buffers = Box::new(DisplayBuffers::with_rotation(trusty_core::framebuffer::Rotation::Rotate90));
+    let mut display_buffers = Box::new(DisplayBuffers::with_rotation(
+        trusty_core::framebuffer::Rotation::Rotate90,
+    ));
 
     // Create E-Ink Display instance
     info!("Creating E-Ink Display driver");

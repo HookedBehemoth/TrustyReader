@@ -307,7 +307,10 @@ impl FatFs {
 }
 
 fn null_terminate(path: &str) -> [u8; 256] {
-    assert!(path.len() < 256, "Path too long for static null-terminated buffer");
+    assert!(
+        path.len() < 256,
+        "Path too long for static null-terminated buffer"
+    );
     let mut null_terminated_path = [0u8; 256];
     null_terminated_path[..path.len()].copy_from_slice(path.as_bytes());
     null_terminated_path
@@ -318,10 +321,8 @@ impl ErrorType for FatFs {
 }
 
 impl Filesystem for FatFs {
-    type Directory
-        = DirectoryEntry;
-    type File
-        = FileEntry;
+    type Directory = DirectoryEntry;
+    type File = FileEntry;
     fn open_file(
         &self,
         path: &str,
@@ -339,9 +340,7 @@ impl Filesystem for FatFs {
             if res.0 != 0 {
                 Err(res)
             } else {
-                Ok(FileEntry {
-                    f,
-                })
+                Ok(FileEntry { f })
             }
         }
     }
@@ -362,9 +361,7 @@ impl Filesystem for FatFs {
             if res.0 != 0 {
                 Err(res)
             } else {
-                Ok(DirectoryEntry {
-                    d,
-                })
+                Ok(DirectoryEntry { d })
             }
         }
     }

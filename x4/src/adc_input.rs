@@ -28,13 +28,25 @@ where
     adc: Adc<'a, ADC1<'a>, Blocking>,
 }
 
-impl<'a, BatteryPin: AdcChannel + AnalogPin, Pin1: AdcChannel + AnalogPin, Pin2: AdcChannel + AnalogPin>
-    GpioButtonState<'a, BatteryPin, Pin1, Pin2>
+impl<
+    'a,
+    BatteryPin: AdcChannel + AnalogPin,
+    Pin1: AdcChannel + AnalogPin,
+    Pin2: AdcChannel + AnalogPin,
+> GpioButtonState<'a, BatteryPin, Pin1, Pin2>
 {
-    pub fn new(battery_pin: BatteryPin, charging_pin: impl InputPin + 'a, pin1: Pin1, pin2: Pin2, pin_power: impl InputPin + 'a, adc: ADC1<'a>) -> Self {
+    pub fn new(
+        battery_pin: BatteryPin,
+        charging_pin: impl InputPin + 'a,
+        pin1: Pin1,
+        pin2: Pin2,
+        pin_power: impl InputPin + 'a,
+        adc: ADC1<'a>,
+    ) -> Self {
         let mut adc_config = AdcConfig::new();
 
-        let battery_pin = adc_config.enable_pin_with_cal::<_, AdcCal>(battery_pin, Attenuation::_11dB);
+        let battery_pin =
+            adc_config.enable_pin_with_cal::<_, AdcCal>(battery_pin, Attenuation::_11dB);
         let charging_pin = Input::new(charging_pin, InputConfig::default().with_pull(Pull::Up));
 
         let pin1 = adc_config.enable_pin_with_cal::<_, AdcCal>(pin1, Attenuation::_11dB);
@@ -95,10 +107,8 @@ impl<'a, BatteryPin: AdcChannel + AnalogPin, Pin1: AdcChannel + AnalogPin, Pin2:
 
     fn millivolts_to_percentage(millivolts: i16) -> u8 {
         let volts = millivolts as f32 / 1000.0;
-        let y = -144.9390 * volts * volts * volts +
-             1655.8629 * volts * volts -
-             6158.8520 * volts +
-             7501.3202;
+        let y = -144.9390 * volts * volts * volts + 1655.8629 * volts * volts - 6158.8520 * volts
+            + 7501.3202;
         y.clamp(0.0, 100.0) as u8
     }
 
@@ -109,4 +119,3 @@ impl<'a, BatteryPin: AdcChannel + AnalogPin, Pin1: AdcChannel + AnalogPin, Pin2:
         }
     }
 }
-

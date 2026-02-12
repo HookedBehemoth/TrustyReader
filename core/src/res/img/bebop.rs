@@ -9,6 +9,6 @@
 
 use crate::framebuffer::BUFFER_SIZE;
 
-pub static BEBOP: &'static [u8; BUFFER_SIZE] = include_bytes!("./bebop.bin");
-pub static BEBOP_LSB: &'static [u8; BUFFER_SIZE] = include_bytes!("./bebop_lsb.bin");
-pub static BEBOP_MSB: &'static [u8; BUFFER_SIZE] = include_bytes!("./bebop_msb.bin");
+pub static BEBOP: &[u8; BUFFER_SIZE] = include_bytes!("./bebop.bin");
+pub static BEBOP_LSB: &[u8; BUFFER_SIZE] = include_bytes!("./bebop_lsb.bin");
+pub static BEBOP_MSB: &[u8; BUFFER_SIZE] = include_bytes!("./bebop_msb.bin");

@@ -53,23 +53,23 @@ impl From<core::str::Utf8Error> for XmlError {
 impl<R: embedded_io::Read, const BUFFER_SIZE: usize> XmlParser<'_, R, BUFFER_SIZE> {
     pub fn new<'a>(reader: &'a mut R, total: usize) -> Result<XmlParser<'a, R, BUFFER_SIZE>> {
         let mut buffer = [0; BUFFER_SIZE];
-        let end = reader.read(&mut buffer).map_err(|e| XmlError::IoError(e.kind()))?;
+        let end = reader
+            .read(&mut buffer)
+            .map_err(|e| XmlError::IoError(e.kind()))?;
         let remaining = total - end;
-        Ok(
-            XmlParser {
-                reader,
-                remaining,
-                buffer,
-                pos: 0,
-                end,
-                event: None,
-                block: None,
-                self_closing: false,
-            }
-        )
+        Ok(XmlParser {
+            reader,
+            remaining,
+            buffer,
+            pos: 0,
+            end,
+            event: None,
+            block: None,
+            self_closing: false,
+        })
     }
 
-    pub fn next(&mut self) -> Result<XmlEvent> {
+    pub fn next_event(&mut self) -> Result<XmlEvent> {
         // Ensure we have an XML declaration at the start of the document
         // We should probably ensure version 1.0 and UTF-8 encoding.
         let Some(_) = self.event else {
@@ -105,7 +105,7 @@ impl<R: embedded_io::Read, const BUFFER_SIZE: usize> XmlParser<'_, R, BUFFER_SIZ
             self.event = Some(XmlEvent::Text);
             return Ok(XmlEvent::Text);
         }
-        
+
         self.pos += curr_end;
         match self.ensure(3) {
             Ok(()) => {}
@@ -125,7 +125,6 @@ impl<R: embedded_io::Read, const BUFFER_SIZE: usize> XmlParser<'_, R, BUFFER_SIZ
             (b'/', _) => (XmlEvent::EndElement, "</", ">"),
             (_, _) => (XmlEvent::StartElement, "<", ">"),
         };
-
 
         let (start, end) = self.try_find(n_start, n_end)?;
 
@@ -168,31 +167,39 @@ impl<R: embedded_io::Read, const BUFFER_SIZE: usize> XmlParser<'_, R, BUFFER_SIZ
     /// Moves the unparsed characters starting from offset to the beginning
     /// of the buffer, updates positional indices and reads more data.
     fn advance(&mut self, offset: usize) -> Result<()> {
-        trace!("Advancing by {} bytes (pos: {}, end: {}, buffer len: {}, remaining: {})", offset, self.pos, self.end, self.buffer.len(), self.remaining);
+        trace!(
+            "Advancing by {offset} bytes (remaining: {})",
+            self.remaining
+        );
         assert!(offset <= self.end);
         assert!(offset <= self.buffer.len());
         if self.remaining == 0 {
-            // self.pos += offset;
             return Ok(());
         }
         trace!("Copying {} bytes to start of buffer", self.end - offset);
         for i in offset..self.end {
             self.buffer[i - offset] = self.buffer[i];
         }
-        // self.pos = self.pos.saturating_sub(offset);
         self.pos = 0;
         self.end -= offset;
         let data_start = self.buffer.len() - offset;
-        let read_bytes = self.reader.read(&mut self.buffer[data_start..]).map_err(|e| XmlError::IoError(e.kind()))?;
+        let read_bytes = self
+            .reader
+            .read(&mut self.buffer[data_start..])
+            .map_err(|e| XmlError::IoError(e.kind()))?;
         self.end += read_bytes;
         self.remaining -= read_bytes;
-        trace!("Read {} bytes, new buffer len: {}, remaining: {}", read_bytes, self.buffer().len(), self.remaining);
+        trace!(
+            "Read {read_bytes} bytes, new buffer len: {}, remaining: {}",
+            self.buffer().len(),
+            self.remaining
+        );
         Ok(())
     }
 
     /// Ensure at least `size` bytes are available in the buffer, advancing if necessary.
     fn ensure(&mut self, size: usize) -> Result<()> {
-        // trace!("Ensuring {} bytes (pos: {}, end: {}, buffer len: {}, remaining: {})", size, self.pos, self.end, self.buffer().len(), self.remaining);
+        trace!("Ensuring {size} bytes (remaining: {})", self.remaining);
         let available = self.buffer().len();
         if available >= size {
             return Ok(());
@@ -207,32 +214,36 @@ impl<R: embedded_io::Read, const BUFFER_SIZE: usize> XmlParser<'_, R, BUFFER_SIZ
     /// If we find the start needle but not the end, we advance to have the start at 0 and try again - once.
     /// If we find neither, we advance to the end of the buffer and try again - once.
     fn try_find(&mut self, n_start: &str, n_end: &str) -> Result<(usize, usize)> {
-        trace!("Trying to find '{}' and '{}' (pos: {}, end: {}, buffer len: {}, remaining: {})", n_start, n_end, self.pos, self.end, self.buffer().len(), self.remaining);
+        trace!(
+            "Trying to find '{n_start}' and '{n_end}' (remaining: {})",
+            self.remaining
+        );
         let n_start = n_start.as_bytes();
         let n_end = n_end.as_bytes();
         match find_span(self.buffer(), n_start, n_end) {
             Some((start, Some(end))) => Ok((start, end)),
             Some((start, None)) => {
-                // trace!("Found start but not end, advancing to start (pos: {}, start: {})", self.pos, start);
                 self.advance(self.pos + start)?;
                 let end = memchr::memmem::find(self.buffer(), n_end).ok_or(XmlError::Eof)?;
-                // trace!("Found end at {} (pos: {})", end, self.pos);
                 Ok((0, end))
-            },
+            }
             None => {
                 self.advance(self.buffer.len())?;
                 let Some((start, Some(end))) = find_span(self.buffer(), n_start, n_end) else {
                     return Err(XmlError::Eof);
                 };
                 Ok((start, end))
-            },
+            }
         }
     }
 
     /// Tries to find the start needle in the buffer.
     /// If it is not found, we advance to the end of the buffer and try again - once.
     fn try_find_start(&mut self, n_start: &str) -> Result<usize> {
-        trace!("Trying to find start '{}' (pos: {}, end: {}, buffer len: {}, remaining: {})", n_start, self.pos, self.end, self.buffer().len(), self.remaining);
+        trace!(
+            "Trying to find start '{n_start}' (remaining: {})",
+            self.remaining
+        );
         let n_start = n_start.as_bytes();
         match memchr::memmem::find(self.buffer(), n_start) {
             Some(pos) => Ok(pos),
@@ -243,7 +254,7 @@ impl<R: embedded_io::Read, const BUFFER_SIZE: usize> XmlParser<'_, R, BUFFER_SIZ
                     return Err(XmlError::Eof);
                 };
                 Ok(pos)
-            },
+            }
         }
     }
 
@@ -251,7 +262,7 @@ impl<R: embedded_io::Read, const BUFFER_SIZE: usize> XmlParser<'_, R, BUFFER_SIZ
         let Some((start, end)) = self.block else {
             return Err(XmlError::Eof);
         };
-        Ok(core::str::from_utf8(&self.buffer[start..end].trim_ascii())?)
+        Ok(core::str::from_utf8(self.buffer[start..end].trim_ascii())?)
     }
 
     fn buffer(&self) -> &[u8] {
@@ -271,12 +282,10 @@ impl AttributeReader<'_> {
     }
 
     pub fn from_split(split: core::str::SplitAsciiWhitespace<'_>) -> AttributeReader<'_> {
-        AttributeReader {
-            split,
-        }
+        AttributeReader { split }
     }
 
-    pub fn next(&mut self) -> Option<(&str, &str)> {
+    pub fn next_attr(&mut self) -> Option<(&str, &str)> {
         let part = self.split.next()?;
         let mut iter = part.splitn(2, '=');
         let name = iter.next()?;
@@ -290,7 +299,6 @@ fn find_span(buffer: &[u8], start: &[u8], end: &[u8]) -> Option<(usize, Option<u
     let end = memchr::memmem::find(&buffer[start..], end).map(|pos| pos + start);
     Some((start, end))
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -306,12 +314,12 @@ mod tests {
         let mut parser = ContentParser::new(&mut bytes, xml.len()).unwrap();
         let mut element_stack = heapless::Vec::<String, 10>::new();
         loop {
-            match parser.next().unwrap() {
+            match parser.next_event().unwrap() {
                 XmlEvent::Declaration => {
                     let block = parser.block().unwrap().to_ascii_lowercase();
                     let mut attr = AttributeReader::from_block(&block);
-                    assert_eq!(attr.next(), Some(("version", "1.0")));
-                    assert_eq!(attr.next(), Some(("encoding", "utf-8")));
+                    assert_eq!(attr.next_attr(), Some(("version", "1.0")));
+                    assert_eq!(attr.next_attr(), Some(("encoding", "utf-8")));
                 }
                 XmlEvent::EndOfFile => {
                     break;
@@ -340,7 +348,10 @@ mod tests {
         for rem in &element_stack {
             trace!("Unclosed element: {}", rem);
         }
-        assert!(element_stack.is_empty(), "Element stack should be empty at end of document");
+        assert!(
+            element_stack.is_empty(),
+            "Element stack should be empty at end of document"
+        );
     }
 
     #[test]
@@ -405,8 +416,6 @@ mod tests {
                 <child>More text</child>\
             </root>";
         let data = xml.as_bytes();
-        // let mut buffer = data;
-        // let mut parser = XmlParser::new(&mut buffer, data.len()).unwrap();
 
         let Some((start, Some(end))) = find_span(data, b"<", b">") else {
             panic!("Failed to find span");
@@ -421,7 +430,11 @@ mod tests {
 
     #[test]
     fn test_find() {
-        fn find_str<'a>(parser: &'a mut Parser<'_, &'_ [u8]>, n_start: &str, n_end: &str) -> Result<&'a str> {
+        fn find_str<'a>(
+            parser: &'a mut Parser<'_, &'_ [u8]>,
+            n_start: &str,
+            n_end: &str,
+        ) -> Result<&'a str> {
             let (start, end) = parser.try_find(n_start, n_end)?;
             Ok(core::str::from_utf8(&parser.buffer[start..end])?)
         }
@@ -447,34 +460,34 @@ mod tests {
             </root>";
         let mut data = xml.as_bytes();
         let mut parser = Parser::new(&mut data, xml.len()).unwrap();
-        assert_eq!(parser.next().unwrap(), XmlEvent::Declaration);
+        assert_eq!(parser.next_event().unwrap(), XmlEvent::Declaration);
         let mut attr = AttributeReader::from_block(parser.block().unwrap());
-        assert_eq!(attr.next().unwrap(), ("version", "1.0"));
-        assert_eq!(attr.next().unwrap(), ("encoding", "UTF-8"));
-        assert_eq!(attr.next().unwrap(), ("standalone", "yes"));
-        assert_eq!(parser.next().unwrap(), XmlEvent::StartElement);
+        assert_eq!(attr.next_attr().unwrap(), ("version", "1.0"));
+        assert_eq!(attr.next_attr().unwrap(), ("encoding", "UTF-8"));
+        assert_eq!(attr.next_attr().unwrap(), ("standalone", "yes"));
+        assert_eq!(parser.next_event().unwrap(), XmlEvent::StartElement);
         assert_eq!(parser.name().unwrap(), "root");
         let mut attr = parser.attr().unwrap();
-        assert_eq!(attr.next().unwrap(), ("attr1", "value1"));
-        assert_eq!(attr.next().unwrap(), ("attr2", "value2"));
-        assert_eq!(parser.next().unwrap(), XmlEvent::StartElement);
+        assert_eq!(attr.next_attr().unwrap(), ("attr1", "value1"));
+        assert_eq!(attr.next_attr().unwrap(), ("attr2", "value2"));
+        assert_eq!(parser.next_event().unwrap(), XmlEvent::StartElement);
         assert_eq!(parser.name().unwrap(), "child");
-        assert_eq!(parser.next().unwrap(), XmlEvent::Text);
+        assert_eq!(parser.next_event().unwrap(), XmlEvent::Text);
         assert_eq!(parser.block().unwrap(), "Text");
-        assert_eq!(parser.next().unwrap(), XmlEvent::EndElement);
+        assert_eq!(parser.next_event().unwrap(), XmlEvent::EndElement);
         assert_eq!(parser.name().unwrap(), "child");
-        assert_eq!(parser.next().unwrap(), XmlEvent::StartElement);
+        assert_eq!(parser.next_event().unwrap(), XmlEvent::StartElement);
         assert_eq!(parser.name().unwrap(), "child");
-        assert_eq!(parser.next().unwrap(), XmlEvent::Text);
+        assert_eq!(parser.next_event().unwrap(), XmlEvent::Text);
         assert_eq!(parser.block().unwrap(), "More text");
-        assert_eq!(parser.next().unwrap(), XmlEvent::EndElement);
+        assert_eq!(parser.next_event().unwrap(), XmlEvent::EndElement);
         assert_eq!(parser.name().unwrap(), "child");
-        assert_eq!(parser.next().unwrap(), XmlEvent::StartElement);
+        assert_eq!(parser.next_event().unwrap(), XmlEvent::StartElement);
         assert_eq!(parser.name().unwrap(), "self-closing");
-        assert_eq!(parser.next().unwrap(), XmlEvent::EndElement);
+        assert_eq!(parser.next_event().unwrap(), XmlEvent::EndElement);
         assert_eq!(parser.name().unwrap(), "self-closing");
-        assert_eq!(parser.next().unwrap(), XmlEvent::EndElement);
+        assert_eq!(parser.next_event().unwrap(), XmlEvent::EndElement);
         assert_eq!(parser.name().unwrap(), "root");
-        assert_eq!(parser.next().unwrap(), XmlEvent::EndOfFile);
+        assert_eq!(parser.next_event().unwrap(), XmlEvent::EndOfFile);
     }
 }
