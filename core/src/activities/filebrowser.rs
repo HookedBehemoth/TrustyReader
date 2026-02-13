@@ -95,7 +95,7 @@ impl<FileEntry: crate::fs::DirEntry> super::Activity for FileBrowser<FileEntry> 
             super::UpdateResult::Redraw
         } else if buttons.is_pressed(Buttons::Confirm) {
             let entry = &self.entries[*self.focus as usize];
-            let separator = if self.path.is_empty() { "/" } else { "" };
+            let separator = if !self.path.is_empty() { "/" } else { "" };
             let Ok(path) = heapless::format!("{}{separator}{}", self.path, entry.name()) else {
                 info!(
                     "Failed to construct path for {} + {}",
