@@ -71,7 +71,7 @@ impl MinifbDisplay {
                 panic!("Unable to open window: {}", e);
             });
 
-        window.set_target_fps(5);
+        window.set_target_fps(60);
         window
     }
 
@@ -168,6 +168,18 @@ impl MinifbDisplay {
             };
             self.window = Self::create_window(self.internal_rotation, self.scale);
             self.update_display();
+        }
+        if self.window.is_key_down(minifb::Key::NumPad1) {
+            info!("Setting target FPS to 1");
+            self.window.set_target_fps(1);
+        }
+        if self.window.is_key_down(minifb::Key::NumPad5) {
+            info!("Setting target FPS to 5");
+            self.window.set_target_fps(5);
+        }
+        if self.window.is_key_down(minifb::Key::NumPad9) {
+            info!("Setting target FPS to 60");
+            self.window.set_target_fps(60);
         }
         self.buttons.update(current);
     }
