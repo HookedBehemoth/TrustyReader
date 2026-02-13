@@ -8,9 +8,10 @@ use crate::activities::home::HomeActivity;
 use crate::activities::settings::SettingsActivity;
 use crate::activities::{ActivityType, home};
 
+use crate::container::epub;
 use crate::display::RefreshMode;
 use crate::res::img::bebop;
-use crate::zip;
+
 use crate::{
     activities::{Activity, ApplicationState},
     battery::ChargeState,
@@ -132,26 +133,17 @@ where
             }
             ActivityType::Settings => Box::new(SettingsActivity::new()),
             ActivityType::Demo => Box::new(DemoActivity::new()),
-            // ActivityType::Reader { path } => Box::new(crate::activities::reader::ReaderActivity::new(path)),
-            // ActivityType::Reader { path } => unreachable!("TODO: Reader ({path})"),
             ActivityType::Reader { path } => {
+                info!("Opening EPUB reader for path: {}", path);
                 let mut file = self
                     .filesystem
                     .open_file(path, crate::fs::Mode::Read)
                     .unwrap();
-                let zip = zip::parse_zip(&mut file).unwrap();
-                for entry in &zip {
-                    // info!("Zip entry: {}", &entry.name);
-                    if entry.name.ends_with(".ncx") {
-                        let mut reader = zip::ZipEntryReader::new(&mut file, entry).unwrap();
-                        let _ncx =
-                            crate::container::epub::ncx::parse(&mut reader, entry.size as usize)
-                                .unwrap();
-                        // info!("Parsed NCX: {:?}", ncx);
-                    }
-                }
+
+                let epub = epub::parse(&mut file).unwrap();
+                let meta = &epub.metadata;
+                info!("Parsed EPUB: title={}, author={:?} ({:?})", meta.title, meta.author, meta.language);
                 Box::new(crate::activities::reader::ReaderActivity {})
-                // unreachable!("TODO: Reader ({path})");
             }
         }
     }

@@ -143,7 +143,7 @@ impl<R: embedded_io::Read, const BUFFER_SIZE: usize> XmlParser<R, BUFFER_SIZE> {
         match self.event {
             Some(XmlEvent::StartElement) | Some(XmlEvent::EndElement) => {
                 let block = self.block()?;
-                if let Some(first) = block.split_whitespace().next() {
+                if let Some(first) = block.split_ascii_whitespace().next() {
                     return Ok(first);
                 }
                 Ok(block)
@@ -159,6 +159,18 @@ impl<R: embedded_io::Read, const BUFFER_SIZE: usize> XmlParser<R, BUFFER_SIZE> {
                 let mut split = block.split_ascii_whitespace();
                 split.next();
                 Ok(AttributeReader::from_split(split))
+            }
+            _ => Err(XmlError::InvalidState),
+        }
+    }
+
+    pub fn name_and_attrs(&self) -> Result<(&str, AttributeReader<'_>)> {
+        match self.event {
+            Some(XmlEvent::StartElement) => {
+                let block = self.block()?;
+                let mut split = block.split_ascii_whitespace();
+                let name = split.next().unwrap_or("");
+                Ok((name, AttributeReader::from_split(split)))
             }
             _ => Err(XmlError::InvalidState),
         }
@@ -258,7 +270,7 @@ impl<R: embedded_io::Read, const BUFFER_SIZE: usize> XmlParser<R, BUFFER_SIZE> {
         }
     }
 
-    fn block(&self) -> Result<&str> {
+    pub fn block(&self) -> Result<&str> {
         let Some((start, end)) = self.block else {
             return Err(XmlError::Eof);
         };
@@ -367,6 +379,8 @@ mod tests {
     #[test]
     fn test_walk_opf() {
         let xml = include_str!("test_data/content.opf");
+        walk(xml);
+        let xml = include_str!("test_data/ellc12_content.opf");
         walk(xml);
     }
 
