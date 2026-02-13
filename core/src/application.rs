@@ -1,14 +1,15 @@
 use alloc::boxed::Box;
 
+use alloc::string::ToString;
 use log::info;
 
 use crate::activities::demo::DemoActivity;
 use crate::activities::filebrowser::FileBrowser;
 use crate::activities::home::HomeActivity;
+use crate::activities::reader::ReaderActivity;
 use crate::activities::settings::SettingsActivity;
 use crate::activities::{ActivityType, home};
 
-use crate::container::epub;
 use crate::display::RefreshMode;
 use crate::res::img::bebop;
 
@@ -20,10 +21,7 @@ use crate::{
     input,
 };
 
-pub struct Application<'a, Filesystem>
-where
-    Filesystem: crate::fs::Filesystem,
-{
+pub struct Application<'a, Filesystem> {
     dirty: bool,
     display_buffers: &'a mut DisplayBuffers,
     filesystem: Filesystem,
@@ -36,7 +34,7 @@ where
 
 impl<'a, Filesystem> Application<'a, Filesystem>
 where
-    Filesystem: crate::fs::Filesystem,
+    Filesystem: crate::fs::Filesystem + Clone + 'static,
 {
     pub fn new(display_buffers: &'a mut DisplayBuffers, filesystem: Filesystem) -> Self {
         let activity_type = ActivityType::home();
@@ -133,18 +131,10 @@ where
             }
             ActivityType::Settings => Box::new(SettingsActivity::new()),
             ActivityType::Demo => Box::new(DemoActivity::new()),
-            ActivityType::Reader { path } => {
-                info!("Opening EPUB reader for path: {}", path);
-                let mut file = self
-                    .filesystem
-                    .open_file(path, crate::fs::Mode::Read)
-                    .unwrap();
-
-                let epub = epub::parse(&mut file).unwrap();
-                let meta = &epub.metadata;
-                info!("Parsed EPUB: title={}, author={:?} ({:?})", meta.title, meta.author, meta.language);
-                Box::new(crate::activities::reader::ReaderActivity {})
-            }
+            ActivityType::Reader { path } => Box::new(ReaderActivity::new(
+                self.filesystem.clone(),
+                path.to_string(),
+            )),
         }
     }
 }

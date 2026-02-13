@@ -293,6 +293,7 @@ unsafe extern "C" {
     fn getnum() -> i32;
 }
 
+#[derive(Clone)]
 pub struct FatFs;
 
 impl FatFs {

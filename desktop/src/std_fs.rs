@@ -4,6 +4,7 @@ use embedded_io::{ErrorType, SeekFrom};
 use log::info;
 use trusty_core::fs::{DirEntry, Mode};
 
+#[derive(Clone)]
 pub struct StdFilesystem {
     base_path: std::path::PathBuf,
 }

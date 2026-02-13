@@ -9,7 +9,7 @@ pub enum Mode {
     ReadWrite,
 }
 
-pub trait Filesystem: ErrorType {
+pub trait Filesystem: Clone + ErrorType {
     type File: File;
     type Directory: Directory;
 
