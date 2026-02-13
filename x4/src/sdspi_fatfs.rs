@@ -447,9 +447,26 @@ impl trusty_core::fs::Directory for DirectoryEntry {
                 if fno.fname[0] == 0 {
                     break;
                 }
-                entries.push(DirEntry::from_filinfo(&fno));
+                // Skip volume labels and system files
+                if fno.fattrib & 0x6 != 0 {
+                    continue;
+                }
+                let entry = DirEntry::from_filinfo(&fno);
+                // Other FW artefacts
+                if entry.name.starts_with(".")
+                || entry.name.ends_with(".pos")
+                || (entry.is_dir && entry.name == "microreader") {
+                    continue;
+                }
+                entries.push(entry);
             }
         }
+        entries.sort_by(|a, b| {
+            a.is_dir
+                .cmp(&b.is_dir)
+                .reverse()
+                .then(a.name.cmp(&b.name))
+        });
         Ok(entries)
     }
 }

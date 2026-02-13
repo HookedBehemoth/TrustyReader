@@ -166,6 +166,12 @@ impl trusty_core::fs::Directory for StdDirectory {
                 Err(_) => return Err(embedded_io::ErrorKind::InvalidInput),
             }
         }
+        result.sort_by(|a, b| {
+            a.is_directory
+                .cmp(&b.is_directory)
+                .reverse()
+                .then(a.name.cmp(&b.name))
+        });
         Ok(result)
     }
 }
