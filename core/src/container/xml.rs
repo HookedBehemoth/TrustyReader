@@ -126,9 +126,10 @@ impl<R: embedded_io::Read, const BUFFER_SIZE: usize> XmlParser<R, BUFFER_SIZE> {
             (_, _) => (XmlEvent::StartElement, "<", ">"),
         };
 
-        let (start, end) = self.try_find(n_start, n_end)?;
+        let (start, mut end) = self.try_find(n_start, n_end)?;
 
         if pattern == XmlEvent::StartElement && self.buffer()[end - 1] == b'/' {
+end -= 1;
             self.self_closing = true;
         }
 
