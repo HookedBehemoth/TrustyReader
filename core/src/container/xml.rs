@@ -1,6 +1,8 @@
 #[cfg(test)]
 extern crate std;
 
+use core::ops::Range;
+
 use embedded_io::Error;
 
 macro_rules! trace {
@@ -16,21 +18,38 @@ pub struct XmlParser<R> {
     buffer: alloc::vec::Vec<u8>,
     pos: usize,
     end: usize,
-    event: Option<XmlEvent>,
-    block: Option<(usize, usize)>,
-    self_closing: bool,
+    at_start: bool,
+    self_closing: Option<Range<usize>>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum XmlEvent {
-    Declaration,
-    ProcessingInstruction,
-    Dtd,
-    CDATA,
-    Comment,
-    StartElement,
-    Text,
-    EndElement,
+#[derive(Debug, Clone, PartialEq)]
+pub enum XmlEvent<'a> {
+    Declaration {
+        attrs: AttributeReader<'a>,
+    },
+    ProcessingInstruction {
+        name: &'a str,
+        attrs: AttributeReader<'a>,
+    },
+    Dtd {
+        content: &'a str,
+    },
+    CDATA {
+        data: &'a [u8],
+    },
+    Comment {
+        content: &'a str,
+    },
+    StartElement {
+        name: &'a str,
+        attrs: AttributeReader<'a>,
+    },
+    Text {
+        content: &'a str,
+    },
+    EndElement {
+        name: &'a str,
+    },
     EndOfFile,
 }
 
@@ -45,9 +64,7 @@ pub enum XmlError {
 type Result<T> = core::result::Result<T, XmlError>;
 
 impl From<core::str::Utf8Error> for XmlError {
-    fn from(err: core::str::Utf8Error) -> Self {
-        XmlError::Utf8Error(err)
-    }
+    fn from(err: core::str::Utf8Error) -> Self { XmlError::Utf8Error(err) }
 }
 
 impl<R: embedded_io::Read> XmlParser<R> {
@@ -63,33 +80,35 @@ impl<R: embedded_io::Read> XmlParser<R> {
             buffer,
             pos: 0,
             end,
-            event: None,
-            block: None,
-            self_closing: false,
+            at_start: true,
+            self_closing: None,
         })
     }
 
-    pub fn next_event(&mut self) -> Result<XmlEvent> {
+    pub fn next_event(&mut self) -> Result<XmlEvent<'_>> {
         // Ensure we have an XML declaration at the start of the document
         // We should probably ensure version 1.0 and UTF-8 encoding.
-        let Some(_) = self.event else {
+        if self.at_start {
+            self.at_start = false;
             let (start, end) = self.try_find("<?xml", "?>")?;
-            self.block = Some((start, end));
+            let block = core::str::from_utf8(&self.buffer[start..end])?;
+            let attrs = AttributeReader::from_block(block);
             self.pos = end + 2;
-            self.event = Some(XmlEvent::Declaration);
-            return Ok(XmlEvent::Declaration);
+            return Ok(XmlEvent::Declaration { attrs });
         };
 
         if self.pos == self.end && self.remaining == 0 {
             trace!("Pos = End");
-            self.event = Some(XmlEvent::EndOfFile);
             return Ok(XmlEvent::EndOfFile);
         }
 
-        if self.self_closing {
-            self.self_closing = false;
-            self.event = Some(XmlEvent::EndElement);
-            return Ok(XmlEvent::EndElement);
+        if let Some(range) = self.self_closing.take() {
+            let block = &self.buffer[range].trim_ascii();
+            let name = core::str::from_utf8(block)?
+                .split_ascii_whitespace()
+                .next()
+                .ok_or(XmlError::InvalidState)?;
+            return Ok(XmlEvent::EndElement { name });
         }
 
         let curr_end = match self.try_find_start("<") {
@@ -100,81 +119,80 @@ impl<R: embedded_io::Read> XmlParser<R> {
 
         let curr = self.buffer()[..curr_end].trim_ascii();
         if !curr.is_empty() {
-            self.block = Some((self.pos, self.pos + curr_end));
+            let block = self.buffer[self.pos..self.pos + curr_end].trim_ascii();
+            let content = core::str::from_utf8(block)?;
             self.pos += curr_end;
-            self.event = Some(XmlEvent::Text);
-            return Ok(XmlEvent::Text);
+            return Ok(XmlEvent::Text { content });
         }
 
         self.pos += curr_end;
         match self.ensure(3) {
             Ok(()) => {}
             Err(XmlError::Eof) => {
-                self.event = Some(XmlEvent::EndOfFile);
                 return Ok(XmlEvent::EndOfFile);
             }
             Err(e) => return Err(e),
         };
 
+        enum BlockType {
+            CDATA,
+            Comment,
+            Dtd,
+            PI,
+            EndElement,
+            StartElement,
+        }
+
         let b = self.buffer();
-        let (pattern, n_start, n_end) = match (b[1], b[2]) {
-            (b'!', b'[') => (XmlEvent::CDATA, "<![CDATA[", "]]>"),
-            (b'!', b'-') => (XmlEvent::Comment, "<!--", "-->"),
-            (b'!', _) => (XmlEvent::Dtd, "<!", ">"),
-            (b'?', _) => (XmlEvent::Declaration, "<?", "?>"),
-            (b'/', _) => (XmlEvent::EndElement, "</", ">"),
-            (_, _) => (XmlEvent::StartElement, "<", ">"),
+        let (ty, n_start, n_end) = match (b[1], b[2]) {
+            (b'!', b'[') => (BlockType::CDATA, "<![CDATA[", "]]>"),
+            (b'!', b'-') => (BlockType::Comment, "<!--", "-->"),
+            (b'!', _) => (BlockType::Dtd, "<!", ">"),
+            (b'?', _) => (BlockType::PI, "<?", "?>"),
+            (b'/', _) => (BlockType::EndElement, "</", ">"),
+            (_, _) => (BlockType::StartElement, "<", ">"),
         };
 
-        let (start, mut end) = self.try_find(n_start, n_end)?;
+        let (start, end) = self.try_find(n_start, n_end)?;
 
-        if pattern == XmlEvent::StartElement && self.buffer()[end - 1] == b'/' {
-            end -= 1;
-            self.self_closing = true;
-        }
+        let range = if matches!(ty, BlockType::StartElement) && self.buffer()[end - 1] == b'/' {
+            let range = self.pos + start..self.pos + end - 1;
+            self.self_closing = Some(range.clone());
+            range
+        } else {
+            self.pos + start..self.pos + end
+        };
 
-        self.block = Some((self.pos + start, self.pos + end));
+        let block = &self.buffer[range].trim_ascii();
+
+        let event = match ty {
+            BlockType::CDATA => XmlEvent::CDATA { data: block },
+            BlockType::Comment => XmlEvent::Comment {
+                content: core::str::from_utf8(block)?,
+            },
+            BlockType::Dtd => XmlEvent::Dtd {
+                content: core::str::from_utf8(block)?,
+            },
+            BlockType::PI => {
+                let (name, attrs) = Self::name_and_attrs(block)?;
+                XmlEvent::ProcessingInstruction { name, attrs }
+            }
+            BlockType::EndElement => XmlEvent::EndElement {
+                name: core::str::from_utf8(block)?,
+            },
+            BlockType::StartElement => {
+                let (name, attrs) = Self::name_and_attrs(block)?;
+                XmlEvent::StartElement { name, attrs }
+            }
+        };
         self.pos += end + n_end.len();
-        self.event = Some(pattern);
-
-        Ok(self.event.unwrap())
+        Ok(event)
     }
-
-    pub fn name(&self) -> Result<&str> {
-        match self.event {
-            Some(XmlEvent::StartElement) | Some(XmlEvent::EndElement) => {
-                let block = self.block()?;
-                if let Some(first) = block.split_ascii_whitespace().next() {
-                    return Ok(first);
-                }
-                Ok(block)
-            }
-            _ => Err(XmlError::InvalidState),
-        }
-    }
-
-    pub fn attr(&self) -> Result<AttributeReader<'_>> {
-        match self.event {
-            Some(XmlEvent::StartElement) => {
-                let block = self.block()?;
-                let mut split = block.split_ascii_whitespace();
-                split.next();
-                Ok(AttributeReader::from_split(split))
-            }
-            _ => Err(XmlError::InvalidState),
-        }
-    }
-
-    pub fn name_and_attrs(&self) -> Result<(&str, AttributeReader<'_>)> {
-        match self.event {
-            Some(XmlEvent::StartElement) => {
-                let block = self.block()?;
-                let mut split = block.split_ascii_whitespace();
-                let name = split.next().unwrap_or("");
-                Ok((name, AttributeReader::from_split(split)))
-            }
-            _ => Err(XmlError::InvalidState),
-        }
+    pub fn name_and_attrs(block: &[u8]) -> Result<(&str, AttributeReader<'_>)> {
+        let block = core::str::from_utf8(block)?;
+        let mut split = block.split_ascii_whitespace();
+        let name = split.next().unwrap_or("");
+        Ok((name, AttributeReader::from_split(split)))
     }
 
     /// Moves the unparsed characters starting from offset to the beginning
@@ -254,8 +272,8 @@ impl<R: embedded_io::Read> XmlParser<R> {
     /// If it is not found, we advance to the end of the buffer and try again - once.
     fn try_find_start(&mut self, n_start: &str) -> Result<usize> {
         trace!(
-            "Trying to find start '{n_start}' (remaining: {})",
-            self.remaining
+            "Trying to find start '{n_start}' (pos: {}, remaining: {})",
+            self.pos, self.remaining
         );
         let n_start = n_start.as_bytes();
         match memchr::memmem::find(self.buffer(), n_start) {
@@ -271,20 +289,39 @@ impl<R: embedded_io::Read> XmlParser<R> {
         }
     }
 
-    pub fn block(&self) -> Result<&str> {
-        let Some((start, end)) = self.block else {
-            return Err(XmlError::Eof);
-        };
-        Ok(core::str::from_utf8(self.buffer[start..end].trim_ascii())?)
-    }
+    fn buffer(&self) -> &[u8] { &self.buffer[self.pos..self.end] }
+}
 
-    fn buffer(&self) -> &[u8] {
-        &self.buffer[self.pos..self.end]
+#[derive(Clone)]
+pub struct AttributeReader<'a> {
+    split: core::str::SplitAsciiWhitespace<'a>,
+}
+
+impl core::fmt::Debug for AttributeReader<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let mut builder = f.debug_map();
+        for (n, v) in self.clone() {
+            builder.entry(&n, &v);
+        }
+        builder.finish()
     }
 }
 
-pub struct AttributeReader<'a> {
-    split: core::str::SplitAsciiWhitespace<'a>,
+impl Default for AttributeReader<'_> {
+    fn default() -> Self {
+        AttributeReader {
+            split: "".split_ascii_whitespace(),
+        }
+    }
+}
+
+impl PartialEq for AttributeReader<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.clone()
+            .zip(other.clone())
+            .all(|((n1, v1), (n2, v2))| n1.eq_ignore_ascii_case(n2) && v1 == v2)
+    }
+    fn ne(&self, other: &Self) -> bool { !self.eq(other) }
 }
 
 impl<'a> AttributeReader<'a> {
@@ -298,9 +335,11 @@ impl<'a> AttributeReader<'a> {
         AttributeReader { split }
     }
 
+    /// Case-insensitive
+    /// Careful: mutates internal iterator
     pub fn get(&mut self, name: &str) -> Option<&str> {
         for (n, v) in self {
-            if n == name {
+            if n.eq_ignore_ascii_case(name) {
                 return Some(v);
             }
         }
@@ -327,6 +366,7 @@ fn find_span(buffer: &[u8], start: &[u8], end: &[u8]) -> Option<(usize, Option<u
 }
 
 #[cfg(test)]
+#[rustfmt::skip]
 mod tests {
     extern crate std;
 
@@ -339,30 +379,29 @@ mod tests {
         let mut element_stack = heapless::Vec::<String, 10>::new();
         loop {
             match parser.next_event().unwrap() {
-                XmlEvent::Declaration => {
-                    let block = parser.block().unwrap().to_ascii_lowercase();
-                    let mut attr = AttributeReader::from_block(&block);
-                    assert_eq!(attr.next(), Some(("version", "1.0")));
-                    assert_eq!(attr.next(), Some(("encoding", "utf-8")));
+                XmlEvent::Declaration { mut attrs } => {
+                    trace!("--Declaration");
+                    assert_eq!(attrs.get("version"), Some("1.0"));
+                    assert!(
+                        attrs
+                            .get("encoding")
+                            .map(|v| v.to_ascii_lowercase() == "utf-8")
+                            == Some(true)
+                    );
                 }
-                XmlEvent::EndOfFile => {
+                XmlEvent::EndOfFile { .. } => {
+                    trace!("--End of file");
                     break;
                 }
-                XmlEvent::StartElement => {
-                    let name = parser.name().unwrap();
-                    trace!("Start element: {}", name);
+                XmlEvent::StartElement { name, .. } => {
+                    trace!("--Start element: {}", name);
                     element_stack.push(String::from(name)).unwrap();
                 }
-                XmlEvent::Text => {
-                    let text = parser.block().unwrap();
-                    let text = text.trim_ascii();
-                    if !text.is_empty() {
-                        trace!("Text: {}", text);
-                    }
+                XmlEvent::Text { content } => {
+                    trace!("--Text: {}", content);
                 }
-                XmlEvent::EndElement => {
-                    let name = parser.name().unwrap();
-                    trace!("End element: {}", name);
+                XmlEvent::EndElement { name } => {
+                    trace!("--End element: {}", name);
                     let expected = element_stack.pop().unwrap();
                     assert_eq!(name, expected);
                 }
@@ -455,7 +494,7 @@ mod tests {
     #[test]
     fn test_find() {
         fn find_str<'a>(
-            parser: &'a mut Parser<&'_ [u8]>,
+            parser: &'a mut XmlParser<&'_ [u8]>,
             n_start: &str,
             n_end: &str,
         ) -> Result<&'a str> {
@@ -465,7 +504,7 @@ mod tests {
 
         let data = LOREM.as_bytes();
         let buffer = data;
-        let mut parser = Parser::new(buffer, data.len()).unwrap();
+        let mut parser = XmlParser::new(buffer, data.len(), 256).unwrap();
         let ipsum = find_str(&mut parser, "Lorem ", " dolor").unwrap();
         assert_eq!(ipsum, "ipsum");
         let aliquyam = find_str(&mut parser, "no sea takimata ", " ctus est").unwrap();
@@ -475,43 +514,45 @@ mod tests {
 
     #[test]
     fn test_full() {
+        use XmlEvent::*;
+        use core::assert_matches;
+
         let xml = "\
             <?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\
             <root attr1=\"value1\" attr2=\"value2\">\
                 <child>Text</child>\
                 <child>More text</child>\
+                <child>  \tText with whitespace \r\n  </child>\
                 <self-closing />\
+                <self-closing/>\
             </root>";
         let mut data = xml.as_bytes();
-        let mut parser = Parser::new(&mut data, xml.len()).unwrap();
-        assert_eq!(parser.next_event().unwrap(), XmlEvent::Declaration);
-        let mut attr = AttributeReader::from_block(parser.block().unwrap());
-        assert_eq!(attr.next().unwrap(), ("version", "1.0"));
-        assert_eq!(attr.next().unwrap(), ("encoding", "UTF-8"));
-        assert_eq!(attr.next().unwrap(), ("standalone", "yes"));
-        assert_eq!(parser.next_event().unwrap(), XmlEvent::StartElement);
-        assert_eq!(parser.name().unwrap(), "root");
-        let mut attr = parser.attr().unwrap();
-        assert_eq!(attr.next().unwrap(), ("attr1", "value1"));
-        assert_eq!(attr.next().unwrap(), ("attr2", "value2"));
-        assert_eq!(parser.next_event().unwrap(), XmlEvent::StartElement);
-        assert_eq!(parser.name().unwrap(), "child");
-        assert_eq!(parser.next_event().unwrap(), XmlEvent::Text);
-        assert_eq!(parser.block().unwrap(), "Text");
-        assert_eq!(parser.next_event().unwrap(), XmlEvent::EndElement);
-        assert_eq!(parser.name().unwrap(), "child");
-        assert_eq!(parser.next_event().unwrap(), XmlEvent::StartElement);
-        assert_eq!(parser.name().unwrap(), "child");
-        assert_eq!(parser.next_event().unwrap(), XmlEvent::Text);
-        assert_eq!(parser.block().unwrap(), "More text");
-        assert_eq!(parser.next_event().unwrap(), XmlEvent::EndElement);
-        assert_eq!(parser.name().unwrap(), "child");
-        assert_eq!(parser.next_event().unwrap(), XmlEvent::StartElement);
-        assert_eq!(parser.name().unwrap(), "self-closing");
-        assert_eq!(parser.next_event().unwrap(), XmlEvent::EndElement);
-        assert_eq!(parser.name().unwrap(), "self-closing");
-        assert_eq!(parser.next_event().unwrap(), XmlEvent::EndElement);
-        assert_eq!(parser.name().unwrap(), "root");
-        assert_eq!(parser.next_event().unwrap(), XmlEvent::EndOfFile);
+        let mut parser = XmlParser::new(&mut data, xml.len(), 512).unwrap();
+        let Declaration { mut attrs } = parser.next_event().unwrap() else {
+            panic!("Expected declaration");
+        };
+        assert_eq!(attrs.get("version"), Some("1.0"));
+        assert_eq!(attrs.get("encoding"), Some("UTF-8"));
+        assert_eq!(attrs.get("standalone"), Some("yes"));
+        let StartElement { name: "root", mut attrs } = parser.next_event().unwrap() else {
+            panic!("Expected start element");
+        };
+        assert_eq!(attrs.get("attr1"), Some("value1"));
+        assert_eq!(attrs.get("attr2"), Some("value2"));
+        assert_matches!(parser.next_event(), Ok(StartElement { name: "child", .. }) );
+        assert_matches!(parser.next_event(), Ok(Text { content: "Text" }));
+        assert_matches!(parser.next_event(), Ok(EndElement { name: "child" }));
+        assert_matches!(parser.next_event(), Ok(StartElement { name: "child", .. }) );
+        assert_matches!(parser.next_event(), Ok(Text { content: "More text" }));
+        assert_matches!(parser.next_event(), Ok(EndElement { name: "child" }));
+        assert_matches!(parser.next_event(), Ok(StartElement { name: "child", .. }) );
+        assert_matches!(parser.next_event(), Ok(Text { content: "Text with whitespace" }));
+        assert_matches!(parser.next_event(), Ok(EndElement { name: "child" }));
+        assert_matches!(parser.next_event(), Ok(StartElement { name: "self-closing", .. }) );
+        assert_matches!(parser.next_event(), Ok(EndElement { name: "self-closing" }) );
+        assert_matches!(parser.next_event(), Ok(StartElement { name: "self-closing", .. }) );
+        assert_matches!(parser.next_event(), Ok(EndElement { name: "self-closing" }) );
+        assert_matches!(parser.next_event(), Ok(EndElement { name: "root" }));
+        assert_matches!(parser.next_event(), Ok(EndOfFile));
     }
 }

@@ -45,7 +45,6 @@ impl TryFrom<&str> for MediaType {
 }
 
 struct ManifestItem {
-    // id: String,
     media_type: MediaType,
     file_idx: u16,
 }
@@ -75,28 +74,21 @@ pub fn parse(file: &mut impl File, file_resolver: FileResolver, rootfile: &str) 
     loop {
         let event = parser.next_event()?;
         match event {
-            XmlEvent::StartElement => {
-                let (name, mut attrs) = parser.name_and_attrs()?;
-                match name {
-                    "manifest" => manifest = parse_manifest(&mut parser, &file_resolver)?,
-                    "spine" => {
-                        if let Some(value) = attrs.get("toc") {
-                            if let Some(entry) = manifest.get(value) {
-                                if entry.media_type == MediaType::Ncx {
-                                    ncx_toc_entry = Some(entry.file_idx);
-                                } else {
-                                    log::error!(
-                                        "TOC entry has wrong media type: {:?}",
-                                        entry.media_type
-                                    );
-                                }
-                            }
-                        }
-                        spine = parse_spine(&mut parser, &manifest)?
+            XmlEvent::StartElement { name: "manifest", .. } => {
+                manifest = parse_manifest(&mut parser, &file_resolver)?;
+            }
+            XmlEvent::StartElement { name: "spine", mut attrs } => {
+                if let Some(entry) = attrs.get("toc").and_then(|v| manifest.get(v)) {
+                    if entry.media_type == MediaType::Ncx {
+                        ncx_toc_entry = Some(entry.file_idx);
+                    } else {
+                        log::error!("TOC entry has wrong media type: {:?}", entry.media_type);
                     }
-                    "metadata" => metadata = Some(parse_metadata(&mut parser)?),
-                    _ => {}
                 }
+                spine = parse_spine(&mut parser, &manifest)?
+            }
+            XmlEvent::StartElement { name: "metadata", .. } => {
+                metadata = Some(parse_metadata(&mut parser)?);
             }
             XmlEvent::EndOfFile => break,
             _ => {}
@@ -141,38 +133,29 @@ fn parse_metadata<R: embedded_io::Read>(parser: &mut XmlParser<R>) -> Result<Met
     let mut language = None;
     loop {
         match parser.next_event()? {
-            XmlEvent::StartElement => {
-                let name = parser.name()?;
-                match name {
-                    "dc:title" => {
-                        if XmlEvent::Text != parser.next_event()? {
-                            return Err(EpubError::InvalidData);
-                        }
-                        title = parser.block().map(|s| s.to_string()).ok();
-                    }
-                    "dc:creator" => {
-                        if XmlEvent::Text != parser.next_event()? {
-                            return Err(EpubError::InvalidData);
-                        }
-                        author = parser.block().map(|s| s.to_string()).ok();
-                    }
-                    "dc:language" => {
-                        if XmlEvent::Text != parser.next_event()? {
-                            return Err(EpubError::InvalidData);
-                        }
-                        let code = parser.block()?;
-                        let Ok(code) = code.as_bytes()[..].try_into() else {
-                            continue;
-                        };
-                        language = hypher::Lang::from_iso(code);
-                    }
-                    _ => {}
-                }
+            XmlEvent::StartElement { name: "dc:title", .. } => {
+                let XmlEvent::Text { content } = parser.next_event()? else {
+                    return Err(EpubError::InvalidData);
+                };
+                title = Some(content.to_string());
             }
-            XmlEvent::EndElement => {
-                if parser.name()? == "metadata" {
-                    break;
-                }
+            XmlEvent::StartElement { name: "dc:creator", .. } => {
+                let XmlEvent::Text { content } = parser.next_event()? else {
+                    return Err(EpubError::InvalidData);
+                };
+                author = Some(content.to_string());
+            }
+            XmlEvent::StartElement { name: "dc:language", .. } => {
+                let XmlEvent::Text { content } = parser.next_event()? else {
+                    return Err(EpubError::InvalidData);
+                };
+                let Ok(code) = content.as_bytes()[..].try_into() else {
+                    continue;
+                };
+                language = hypher::Lang::from_iso(code);
+            }
+            XmlEvent::EndElement { name: "metadata" } => {
+                break;
             }
             XmlEvent::EndOfFile => return Err(EpubError::InvalidData),
             _ => {}
@@ -196,11 +179,7 @@ fn parse_manifest<R: embedded_io::Read>(
 
     loop {
         match parser.next_event()? {
-            XmlEvent::StartElement => {
-                let (name, mut attrs) = parser.name_and_attrs()?;
-                if name != "item" {
-                    continue;
-                }
+            XmlEvent::StartElement { name: "item", mut attrs } => {
                 let mut id = None;
                 let mut file_idx = None;
                 let mut media_type = None;
@@ -213,19 +192,11 @@ fn parse_manifest<R: embedded_io::Read>(
                     }
                 }
                 if let (Some(id), Some(file_idx), Some(media_type)) = (id, file_idx, media_type) {
-                    manifest.insert(
-                        id,
-                        ManifestItem {
-                            media_type,
-                            file_idx,
-                        },
-                    );
+                    manifest.insert(id, ManifestItem { media_type, file_idx });
                 }
             }
-            XmlEvent::EndElement => {
-                if parser.name()? == "manifest" {
-                    break;
-                }
+            XmlEvent::EndElement { name: "manifest" } => {
+                break;
             }
             XmlEvent::EndOfFile => return Err(EpubError::InvalidData),
             _ => {}
@@ -245,25 +216,18 @@ fn parse_spine<R: embedded_io::Read>(
 
     loop {
         match parser.next_event()? {
-            XmlEvent::StartElement => {
-                let (name, mut attrs) = parser.name_and_attrs()?;
-                if name != "itemref" {
-                    continue;
-                }
-
+            XmlEvent::StartElement { name: "itemref", mut attrs } => {
                 if let Some(value) = attrs.get("idref") {
                     match manifest.get(value) {
-                        Some(ManifestItem { file_idx, .. }) => spine.push(SpineItem {
-                            file_idx: *file_idx,
-                        }),
+                        Some(ManifestItem { file_idx, .. }) => {
+                            spine.push(SpineItem { file_idx: *file_idx })
+                        }
                         None => error!("Couldn't find idref: {} in manifest", value),
                     }
                 }
             }
-            XmlEvent::EndElement => {
-                if parser.name()? == "spine" {
-                    break;
-                }
+            XmlEvent::EndElement { name: "spine" } => {
+                break;
             }
             XmlEvent::EndOfFile => return Err(EpubError::InvalidData),
             _ => {}

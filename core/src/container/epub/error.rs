@@ -15,13 +15,9 @@ pub enum EpubError {
 }
 
 impl From<ZipError> for EpubError {
-    fn from(err: ZipError) -> Self {
-        EpubError::ZipError(err)
-    }
+    fn from(err: ZipError) -> Self { EpubError::ZipError(err) }
 }
 
 impl From<XmlError> for EpubError {
-    fn from(err: XmlError) -> Self {
-        EpubError::XmlError(err)
-    }
+    fn from(err: XmlError) -> Self { EpubError::XmlError(err) }
 }

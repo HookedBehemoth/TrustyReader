@@ -31,9 +31,7 @@ impl FileResolver {
     pub fn file(&self, path: &str) -> Option<&zip::ZipFileEntry> {
         self.entries.iter().find(|e| e.name == path)
     }
-    pub fn entry(&self, idx: u16) -> Option<&zip::ZipFileEntry> {
-        self.entries.get(idx as usize)
-    }
+    pub fn entry(&self, idx: u16) -> Option<&zip::ZipFileEntry> { self.entries.get(idx as usize) }
 }
 
 pub struct Epub {
@@ -53,7 +51,8 @@ pub fn parse(file: &mut impl File) -> Result<Epub> {
     let root = match rootfile.rfind('/') {
         Some(pos) => &rootfile[..=pos],
         None => "",
-    }.to_owned();
+    }
+    .to_owned();
 
     let file_resolver = FileResolver { entries, root };
 

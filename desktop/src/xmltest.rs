@@ -35,13 +35,11 @@ fn test_file(path: &str) {
             trace!("Event: {event:?}");
 
             match event {
-                xml::XmlEvent::StartElement => {
-                    let name = parser.name().unwrap();
+                xml::XmlEvent::StartElement { name, .. } => {
                     *counts.entry(name.to_owned()).or_insert(0) += 1;
                     stack.push(name.to_owned());
                 }
-                xml::XmlEvent::EndElement => {
-                    let name = parser.name().unwrap();
+                xml::XmlEvent::EndElement { name } => {
                     let prev = stack.pop().unwrap();
                     assert_eq!(name, prev);
                 }

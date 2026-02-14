@@ -1,4 +1,6 @@
 #![no_std]
+// stable in 1.95
+#![feature(assert_matches)]
 
 pub mod activities;
 pub mod application;
