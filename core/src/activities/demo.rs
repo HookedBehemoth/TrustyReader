@@ -25,10 +25,7 @@ pub struct DemoActivity {
 
 impl DemoActivity {
     pub fn new() -> Self {
-        Self {
-            screen: 0,
-            full_refresh: true,
-        }
+        Self { screen: 0, full_refresh: true }
     }
 
     fn draw_bebop(&self, display: &mut dyn Display, buffers: &mut DisplayBuffers) {

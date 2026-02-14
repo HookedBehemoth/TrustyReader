@@ -64,7 +64,9 @@ pub enum XmlError {
 type Result<T> = core::result::Result<T, XmlError>;
 
 impl From<core::str::Utf8Error> for XmlError {
-    fn from(err: core::str::Utf8Error) -> Self { XmlError::Utf8Error(err) }
+    fn from(err: core::str::Utf8Error) -> Self {
+        XmlError::Utf8Error(err)
+    }
 }
 
 impl<R: embedded_io::Read> XmlParser<R> {
@@ -289,7 +291,9 @@ impl<R: embedded_io::Read> XmlParser<R> {
         }
     }
 
-    fn buffer(&self) -> &[u8] { &self.buffer[self.pos..self.end] }
+    fn buffer(&self) -> &[u8] {
+        &self.buffer[self.pos..self.end]
+    }
 }
 
 #[derive(Clone)]
@@ -321,7 +325,9 @@ impl PartialEq for AttributeReader<'_> {
             .zip(other.clone())
             .all(|((n1, v1), (n2, v2))| n1.eq_ignore_ascii_case(n2) && v1 == v2)
     }
-    fn ne(&self, other: &Self) -> bool { !self.eq(other) }
+    fn ne(&self, other: &Self) -> bool {
+        !self.eq(other)
+    }
 }
 
 impl<'a> AttributeReader<'a> {

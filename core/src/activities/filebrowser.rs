@@ -36,10 +36,7 @@ impl WrappingNumber {
                 max: self.max,
             }
         } else {
-            Self {
-                value: 0,
-                max: self.max,
-            }
+            Self { value: 0, max: self.max }
         }
     }
 
@@ -50,10 +47,7 @@ impl WrappingNumber {
                 max: self.max,
             }
         } else {
-            Self {
-                value: self.max,
-                max: self.max,
-            }
+            Self { value: self.max, max: self.max }
         }
     }
 }
@@ -70,11 +64,7 @@ impl<FileEntry: crate::fs::DirEntry> FileBrowser<FileEntry> {
             value: focus,
             max: entries.len() as u8 - 1,
         };
-        Self {
-            path,
-            entries,
-            focus,
-        }
+        Self { path, entries, focus }
     }
 }
 

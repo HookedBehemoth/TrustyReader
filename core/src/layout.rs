@@ -133,10 +133,7 @@ fn hyphenate<'a>(
             }
 
             current_line.hyphenated = true;
-            current_line.words.push(Word {
-                text: &word[0..length],
-                x,
-            });
+            current_line.words.push(Word { text: &word[0..length], x });
             return Some((&word[length..], space));
         }
 

@@ -455,19 +455,15 @@ impl trusty_core::fs::Directory for DirectoryEntry {
                 let entry = DirEntry::from_filinfo(&fno);
                 // Other FW artefacts
                 if entry.name.starts_with(".")
-                || entry.name.ends_with(".pos")
-                || (entry.is_dir && entry.name == "microreader") {
+                    || entry.name.ends_with(".pos")
+                    || (entry.is_dir && entry.name == "microreader")
+                {
                     continue;
                 }
                 entries.push(entry);
             }
         }
-        entries.sort_by(|a, b| {
-            a.is_dir
-                .cmp(&b.is_dir)
-                .reverse()
-                .then(a.name.cmp(&b.name))
-        });
+        entries.sort_by(|a, b| a.is_dir.cmp(&b.is_dir).reverse().then(a.name.cmp(&b.name)));
         Ok(entries)
     }
 }

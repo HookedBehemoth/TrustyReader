@@ -17,10 +17,7 @@ fn main() {
     let mut display = MinifbDisplay::default();
     let fs = StdFilesystem::new_with_base_path("sd".into());
     let mut application = Application::new(&mut display_buffers, fs);
-    let charge = ChargeState {
-        level: 75,
-        charging: true,
-    };
+    let charge = ChargeState { level: 75, charging: true };
 
     while display.is_open() {
         display.update();

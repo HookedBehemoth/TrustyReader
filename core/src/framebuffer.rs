@@ -39,7 +39,7 @@ impl DisplayBuffers {
         let mut ret = Self {
             framebuffer: [[0; BUFFER_SIZE]; 2],
             active: false,
-            rotation: rotation,
+            rotation,
         };
         ret.framebuffer[0].fill(0xFF);
         ret.framebuffer[1].fill(0xFF);

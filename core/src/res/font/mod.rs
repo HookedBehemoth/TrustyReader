@@ -96,11 +96,7 @@ impl Glyph {
             | ((height as u32) << 0x0E)
             | (((xmin as i32 + 32) as u32) << 8)
             | ((ymin as i32 + 32) as u32);
-        Self {
-            codepoint,
-            bitmap_index,
-            blob,
-        }
+        Self { codepoint, bitmap_index, blob }
     }
 
     const MASK: u32 = 0x3F;

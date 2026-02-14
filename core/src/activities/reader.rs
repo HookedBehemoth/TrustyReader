@@ -9,7 +9,7 @@ where
 {
     filesystem: Filesystem,
     file_path: String,
-    file: Option<<Filesystem as crate::fs::Filesystem>::File>,
+    _file: Option<<Filesystem as crate::fs::Filesystem>::File>,
 }
 
 impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
@@ -17,7 +17,7 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
         ReaderActivity {
             filesystem,
             file_path,
-            file: None,
+            _file: None,
         }
     }
 }
@@ -32,7 +32,10 @@ impl<Filesystem: crate::fs::Filesystem> super::Activity for ReaderActivity<Files
 
         let epub = epub::parse(&mut file).unwrap();
         let meta = &epub.metadata;
-        info!("Parsed EPUB: title={}, author={:?} ({:?})", meta.title, meta.author, meta.language);
+        info!(
+            "Parsed EPUB: title={}, author={:?} ({:?})",
+            meta.title, meta.author, meta.language
+        );
         for item in &epub.spine {
             let entry = epub.file_resolver.entry(item.file_idx).unwrap();
             info!("\t{}", entry.name);

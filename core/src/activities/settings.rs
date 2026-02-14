@@ -32,9 +32,7 @@ pub struct SettingsActivity {
 
 impl SettingsActivity {
     pub fn new() -> Self {
-        Self {
-            focus: Focus::SwitchOta,
-        }
+        Self { focus: Focus::SwitchOta }
     }
 
     pub fn select(&mut self) -> super::UpdateResult {
