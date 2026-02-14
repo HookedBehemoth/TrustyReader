@@ -33,6 +33,17 @@ impl<Filesystem: crate::fs::Filesystem> super::Activity for ReaderActivity<Files
         let epub = epub::parse(&mut file).unwrap();
         let meta = &epub.metadata;
         info!("Parsed EPUB: title={}, author={:?} ({:?})", meta.title, meta.author, meta.language);
+        for item in &epub.spine {
+            let entry = epub.file_resolver.entry(item.file_idx).unwrap();
+            info!("\t{}", entry.name);
+        }
+        if let Some(toc) = &epub.toc {
+            info!("Table of Contents:");
+            for item in &toc.nav_map.nav_points {
+                let depth = item.depth as _;
+                info!("{:depth$}{}", "", item.label, depth = depth);
+            }
+        }
     }
 
     fn update(&mut self, _state: &super::ApplicationState) -> crate::activities::UpdateResult {

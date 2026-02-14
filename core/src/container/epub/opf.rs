@@ -1,11 +1,10 @@
 use alloc::{
     borrow::ToOwned,
-    boxed::Box,
     collections::btree_map::BTreeMap,
     string::{String, ToString},
     vec::Vec,
 };
-use log::info;
+use log::{error, info};
 
 use crate::{
     container::{
@@ -23,6 +22,7 @@ use super::Result;
 
 /// This is not necessarily complete, but it covers all the
 /// file types we want to support.
+#[derive(PartialEq, Eq, Debug)]
 enum MediaType {
     Image,
     Xhtml,
@@ -65,20 +65,35 @@ pub fn parse(file: &mut impl File, file_resolver: FileResolver, rootfile: &str) 
         .file(rootfile)
         .ok_or(EpubError::FileMissing(RequiredFileTypes::ContentOpf))?;
     let reader = ZipEntryReader::new(file, entry)?;
-    let mut parser = Box::new(XmlParser::<_, 4096>::new(reader, entry.size as _)?);
+    let mut parser = XmlParser::new(reader, entry.size as _, 4096)?;
 
     let mut manifest = BTreeMap::<String, ManifestItem>::new();
     let mut spine = Vec::<SpineItem>::new();
     let mut metadata = None;
+    let mut ncx_toc_entry = None;
 
     loop {
         let event = parser.next_event()?;
         match event {
             XmlEvent::StartElement => {
-                let (name, ..) = parser.name_and_attrs()?;
+                let (name, mut attrs) = parser.name_and_attrs()?;
                 match name {
                     "manifest" => manifest = parse_manifest(&mut parser, &file_resolver)?,
-                    "spine" => spine = parse_spine(&mut parser, &manifest)?,
+                    "spine" => {
+                        if let Some(value) = attrs.get("toc") {
+                            if let Some(entry) = manifest.get(value) {
+                                if entry.media_type == MediaType::Ncx {
+                                    ncx_toc_entry = Some(entry.file_idx);
+                                } else {
+                                    log::error!(
+                                        "TOC entry has wrong media type: {:?}",
+                                        entry.media_type
+                                    );
+                                }
+                            }
+                        }
+                        spine = parse_spine(&mut parser, &manifest)?
+                    }
                     "metadata" => metadata = Some(parse_metadata(&mut parser)?),
                     _ => {}
                 }
@@ -87,18 +102,38 @@ pub fn parse(file: &mut impl File, file_resolver: FileResolver, rootfile: &str) 
             _ => {}
         }
     }
+    drop(parser);
+    drop(manifest);
+
+    let toc = if let Some(entry) = ncx_toc_entry {
+        if let Some(entry) = file_resolver.entry(entry) {
+            let mut reader = ZipEntryReader::new(file, entry)?;
+            match super::ncx::parse(&mut reader, entry.size as _, &file_resolver) {
+                Ok(toc) => Some(toc),
+                Err(e) => {
+                    info!("Failed to parse NCX: {e:?}");
+                    None
+                }
+            }
+        } else {
+            info!("TOC entry not found in zip file");
+            None
+        }
+    } else {
+        info!("No NCX TOC entry found in manifest");
+        None
+    };
 
     let epub = Epub {
         file_resolver,
         spine,
         metadata: metadata.ok_or(EpubError::InvalidData)?,
+        toc,
     };
     Ok(epub)
 }
 
-fn parse_metadata<R: embedded_io::Read, const C: usize>(
-    parser: &mut XmlParser<R, C>,
-) -> Result<Metadata> {
+fn parse_metadata<R: embedded_io::Read>(parser: &mut XmlParser<R>) -> Result<Metadata> {
     info!("Parsing metadata");
 
     let mut title = None;
@@ -151,8 +186,8 @@ fn parse_metadata<R: embedded_io::Read, const C: usize>(
     })
 }
 
-fn parse_manifest<R: embedded_io::Read, const C: usize>(
-    parser: &mut XmlParser<R, C>,
+fn parse_manifest<R: embedded_io::Read>(
+    parser: &mut XmlParser<R>,
     file_resolver: &FileResolver,
 ) -> Result<BTreeMap<String, ManifestItem>> {
     info!("Parsing manifest");
@@ -169,19 +204,12 @@ fn parse_manifest<R: embedded_io::Read, const C: usize>(
                 let mut id = None;
                 let mut file_idx = None;
                 let mut media_type = None;
-                loop {
-                    match attrs.next_attr() {
-                        Some(("href", value)) => {
-                            file_idx = file_resolver.content_idx(value);
-                        }
-                        Some(("id", value)) => {
-                            id = Some(value.to_owned());
-                        }
-                        Some(("media-type", value)) => {
-                            media_type = MediaType::try_from(value).ok();
-                        }
-                        Some(_) => continue,
-                        None => break,
+                while let Some((name, value)) = attrs.next() {
+                    match name {
+                        "href" => file_idx = file_resolver.content_idx(value),
+                        "id" => id = Some(value.to_owned()),
+                        "media-type" => media_type = MediaType::try_from(value).ok(),
+                        _ => continue,
                     }
                 }
                 if let (Some(id), Some(file_idx), Some(media_type)) = (id, file_idx, media_type) {
@@ -207,8 +235,8 @@ fn parse_manifest<R: embedded_io::Read, const C: usize>(
     Ok(manifest)
 }
 
-fn parse_spine<R: embedded_io::Read, const C: usize>(
-    parser: &mut XmlParser<R, C>,
+fn parse_spine<R: embedded_io::Read>(
+    parser: &mut XmlParser<R>,
     manifest: &BTreeMap<String, ManifestItem>,
 ) -> Result<Vec<SpineItem>> {
     info!("Parsing spine");
@@ -223,17 +251,12 @@ fn parse_spine<R: embedded_io::Read, const C: usize>(
                     continue;
                 }
 
-                loop {
-                    match attrs.next_attr() {
-                        Some(("idref", value)) => {
-                            if let Some(item) = manifest.get(value) {
-                                spine.push(SpineItem {
-                                    file_idx: item.file_idx,
-                                });
-                            }
-                        }
-                        Some(_) => continue,
-                        None => break,
+                if let Some(value) = attrs.get("idref") {
+                    match manifest.get(value) {
+                        Some(ManifestItem { file_idx, .. }) => spine.push(SpineItem {
+                            file_idx: *file_idx,
+                        }),
+                        None => error!("Couldn't find idref: {} in manifest", value),
                     }
                 }
             }

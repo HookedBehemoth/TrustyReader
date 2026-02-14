@@ -10,10 +10,10 @@ macro_rules! trace {
     };
 }
 
-pub struct XmlParser<R, const BUFFER_SIZE: usize> {
+pub struct XmlParser<R> {
     reader: R,
     remaining: usize,
-    buffer: [u8; BUFFER_SIZE],
+    buffer: alloc::vec::Vec<u8>,
     pos: usize,
     end: usize,
     event: Option<XmlEvent>,
@@ -50,9 +50,9 @@ impl From<core::str::Utf8Error> for XmlError {
     }
 }
 
-impl<R: embedded_io::Read, const BUFFER_SIZE: usize> XmlParser<R, BUFFER_SIZE> {
-    pub fn new(mut reader: R, total: usize) -> Result<XmlParser<R, BUFFER_SIZE>> {
-        let mut buffer = [0; BUFFER_SIZE];
+impl<R: embedded_io::Read> XmlParser<R> {
+    pub fn new(mut reader: R, total: usize, buffer_size: usize) -> Result<XmlParser<R>> {
+        let mut buffer = alloc::vec![0; buffer_size];
         let end = reader
             .read(&mut buffer)
             .map_err(|e| XmlError::IoError(e.kind()))?;
@@ -129,7 +129,7 @@ impl<R: embedded_io::Read, const BUFFER_SIZE: usize> XmlParser<R, BUFFER_SIZE> {
         let (start, mut end) = self.try_find(n_start, n_end)?;
 
         if pattern == XmlEvent::StartElement && self.buffer()[end - 1] == b'/' {
-end -= 1;
+            end -= 1;
             self.self_closing = true;
         }
 
@@ -287,7 +287,7 @@ pub struct AttributeReader<'a> {
     split: core::str::SplitAsciiWhitespace<'a>,
 }
 
-impl AttributeReader<'_> {
+impl<'a> AttributeReader<'a> {
     pub fn from_block(buffer: &str) -> AttributeReader<'_> {
         AttributeReader {
             split: buffer.trim_ascii().split_ascii_whitespace(),
@@ -298,7 +298,20 @@ impl AttributeReader<'_> {
         AttributeReader { split }
     }
 
-    pub fn next_attr(&mut self) -> Option<(&str, &str)> {
+    pub fn get(&mut self, name: &str) -> Option<&str> {
+        for (n, v) in self {
+            if n == name {
+                return Some(v);
+            }
+        }
+        None
+    }
+}
+
+impl<'a> Iterator for AttributeReader<'a> {
+    type Item = (&'a str, &'a str);
+
+    fn next(&mut self) -> Option<Self::Item> {
         let part = self.split.next()?;
         let mut iter = part.splitn(2, '=');
         let name = iter.next()?;
@@ -320,19 +333,17 @@ mod tests {
     use super::*;
     use alloc::string::String;
 
-    type ContentParser<R> = XmlParser<R, 2048>;
-
     fn walk(xml: &str) {
         let mut bytes = xml.as_bytes();
-        let mut parser = ContentParser::new(&mut bytes, xml.len()).unwrap();
+        let mut parser = XmlParser::new(&mut bytes, xml.len(), 2048).unwrap();
         let mut element_stack = heapless::Vec::<String, 10>::new();
         loop {
             match parser.next_event().unwrap() {
                 XmlEvent::Declaration => {
                     let block = parser.block().unwrap().to_ascii_lowercase();
                     let mut attr = AttributeReader::from_block(&block);
-                    assert_eq!(attr.next_attr(), Some(("version", "1.0")));
-                    assert_eq!(attr.next_attr(), Some(("encoding", "utf-8")));
+                    assert_eq!(attr.next(), Some(("version", "1.0")));
+                    assert_eq!(attr.next(), Some(("encoding", "utf-8")));
                 }
                 XmlEvent::EndOfFile => {
                     break;
@@ -411,13 +422,11 @@ mod tests {
         unt ut labore et dolore magna aliquyam erat, sed diam voluptua. \
         At vero eos et accusam et justo duo dolores et ea rebum. Stet cl";
 
-    type Parser<R> = XmlParser<R, 256>;
-
     #[test]
     fn test_window() {
         let data = LOREM.as_bytes();
         let mut buffer = data;
-        let mut parser = Parser::new(&mut buffer, data.len()).unwrap();
+        let mut parser = XmlParser::new(&mut buffer, data.len(), 256).unwrap();
         assert_eq!(parser.buffer(), &data[..256]);
         parser.advance(256).unwrap();
         assert_eq!(parser.buffer(), &data[256..]);
@@ -477,14 +486,14 @@ mod tests {
         let mut parser = Parser::new(&mut data, xml.len()).unwrap();
         assert_eq!(parser.next_event().unwrap(), XmlEvent::Declaration);
         let mut attr = AttributeReader::from_block(parser.block().unwrap());
-        assert_eq!(attr.next_attr().unwrap(), ("version", "1.0"));
-        assert_eq!(attr.next_attr().unwrap(), ("encoding", "UTF-8"));
-        assert_eq!(attr.next_attr().unwrap(), ("standalone", "yes"));
+        assert_eq!(attr.next().unwrap(), ("version", "1.0"));
+        assert_eq!(attr.next().unwrap(), ("encoding", "UTF-8"));
+        assert_eq!(attr.next().unwrap(), ("standalone", "yes"));
         assert_eq!(parser.next_event().unwrap(), XmlEvent::StartElement);
         assert_eq!(parser.name().unwrap(), "root");
         let mut attr = parser.attr().unwrap();
-        assert_eq!(attr.next_attr().unwrap(), ("attr1", "value1"));
-        assert_eq!(attr.next_attr().unwrap(), ("attr2", "value2"));
+        assert_eq!(attr.next().unwrap(), ("attr1", "value1"));
+        assert_eq!(attr.next().unwrap(), ("attr2", "value2"));
         assert_eq!(parser.next_event().unwrap(), XmlEvent::StartElement);
         assert_eq!(parser.name().unwrap(), "child");
         assert_eq!(parser.next_event().unwrap(), XmlEvent::Text);

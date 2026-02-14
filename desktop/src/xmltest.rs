@@ -27,7 +27,7 @@ fn test_file(path: &str) {
         }
         info!("Found XML file: {}", entry.name);
         let mut zip_entry = zip::ZipEntryReader::new(&mut file, &entry).unwrap();
-        let mut parser = xml::XmlParser::<_, 4096>::new(&mut zip_entry, entry.size as _).unwrap();
+        let mut parser = xml::XmlParser::new(&mut zip_entry, entry.size as _, 4096).unwrap();
         let mut counts = HashMap::new();
         let mut stack = Vec::new();
         loop {

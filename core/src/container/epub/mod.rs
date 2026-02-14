@@ -31,13 +31,16 @@ impl FileResolver {
     pub fn file(&self, path: &str) -> Option<&zip::ZipFileEntry> {
         self.entries.iter().find(|e| e.name == path)
     }
+    pub fn entry(&self, idx: u16) -> Option<&zip::ZipFileEntry> {
+        self.entries.get(idx as usize)
+    }
 }
 
 pub struct Epub {
-    file_resolver: FileResolver,
+    pub file_resolver: FileResolver,
     pub spine: Vec<opf::SpineItem>,
     pub metadata: opf::Metadata,
-    // toc: Option
+    pub toc: Option<ncx::TableOfContents>,
 }
 
 type PathBuf = heapless::String<256>;

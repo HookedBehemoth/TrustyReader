@@ -20,26 +20,19 @@ pub(super) fn parse(
         .ok_or(EpubError::FileMissing(RequiredFileTypes::Container))?;
 
     let reader = ZipEntryReader::new(file, entry)?;
-    let mut parser = XmlParser::<_, 512>::new(reader, entry.size as _)?;
+    let mut parser = XmlParser::new(reader, entry.size as _, 512)?;
     loop {
         let event = parser.next_event()?;
         match event {
             XmlEvent::StartElement => {
-                if parser.name()? != "rootfile" {
+                let (name, mut attrs) = parser.name_and_attrs()?;
+                if name != "rootfile" {
                     continue;
                 }
 
-                let mut attrs = parser.attr()?;
-                loop {
-                    let attr = attrs.next_attr();
-                    if attr.is_none() {
-                        break;
-                    }
-                    let (name, value) = attr.unwrap();
-                    if name == "full-path" {
-                        return Ok(value.to_owned());
-                    }
-                }
+                return attrs.get("full-path")
+                    .map(|s| s.to_owned())
+                    .ok_or(EpubError::InvalidData);
             }
             XmlEvent::EndOfFile => break,
             _ => {}
