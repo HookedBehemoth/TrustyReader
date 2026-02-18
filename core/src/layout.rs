@@ -184,6 +184,9 @@ fn hyphenate<'a>(
 /// the remaining space evenly between the words.
 fn justify(room: u16, words: &mut [Word]) {
     let whitespaces = words.len().saturating_sub(1);
+    if whitespaces == 0 {
+        return;
+    }
     let space = room / whitespaces as u16;
     let mut rem = room % whitespaces as u16;
     let mut offset = 0;

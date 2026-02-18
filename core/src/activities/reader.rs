@@ -1,41 +1,37 @@
 use alloc::{
-    string::{String, ToString},
+    string::String,
     vec::Vec,
 };
 use embedded_graphics::{
     Drawable, mono_font::{MonoTextStyle, ascii::FONT_10X20}, pixelcolor::BinaryColor, prelude::{DrawTarget, OriginDimensions, Point, Primitive, Size}, primitives::{Line, PrimitiveStyle, Rectangle}, text::Text
 };
-use embedded_io::Read;
 use log::{info, warn};
 
 use crate::{
-    container::{book::{self, Book}, epub},
+    container::book,
     display::RefreshMode,
     framebuffer::DisplayBuffers,
-    fs::File,
     input::Buttons,
     layout,
     res::font,
-    zip::ZipEntryReader,
 };
-
 pub struct ReaderActivity<Filesystem>
 where
     Filesystem: crate::fs::Filesystem,
 {
     filesystem: Filesystem,
     file_path: String,
-    // _file: Option<<Filesystem as crate::fs::Filesystem>::File>,
     show_settings: bool,
     settings_cursor: usize,
-    // epub: Option<epub::Epub>,
     font_size: font::FontSize,
     alignment: layout::Alignment,
     justify: bool,
     language: hypher::Lang,
     debug_width: bool,
+    file: Filesystem::File,
     book: Option<book::Book>,
-    chapter: usize,
+    chapter_idx: usize,
+    chapter: Option<book::Chapter>,
     progress: Page,
 }
 
@@ -66,51 +62,25 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
             .open_file(&file_path, crate::fs::Mode::Read)
             .unwrap();
 
-        // let epub = epub::parse(&mut file).unwrap();
-        // let meta = &epub.metadata;
-        // info!(
-        //     "Parsed EPUB: title={}, author={:?} ({:?})",
-        //     meta.title, meta.author, meta.language
-        // );
-        // for item in &epub.spine {
-        //     let entry = epub.file_resolver.entry(item.file_idx).unwrap();
-        //     info!("\t{}", entry.name);
-        // }
-        // if let Some(toc) = &epub.toc {
-        //     info!("Table of Contents:");
-        //     for item in &toc.nav_map.nav_points {
-        //         let depth = item.depth as _;
-        //         info!("{:depth$}{}", "", item.label, depth = depth);
-        //     }
-        // }
+        let book = book::Book::from_file(&file_path, &mut file);
+        let language = book.as_ref().and_then(|book| book.language()).unwrap_or(hypher::Lang::English);
 
-        // TODO: move Book impl?
-        let mut text = String::new();
-        text.reserve_exact(file.size());
-        let mut buf = [0u8; 1024];
-        while let Ok(bytes_read) = file.read(&mut buf) {
-            if bytes_read == 0 {
-                break;
-            }
-            info!("Read {} bytes from file", bytes_read);
-            let chunk = core::str::from_utf8(&buf[..bytes_read]).unwrap_or("");
-            text.push_str(chunk);
-        }
-        let book = book::Book::from_plaintext("asdf".to_string(), text);
+        let chapter = book.as_ref().and_then(|b| b.chapter(0, &mut file));
+
         ReaderActivity {
             filesystem,
             file_path,
-            // _file: None,
             show_settings: false,
             settings_cursor: 0,
-            // epub: Some(epub),
             font_size: font::FontSize::Size26,
             alignment: layout::Alignment::Start,
             justify: true,
-            language: hypher::Lang::English,
+            language,
             debug_width: false,
-            book: Some(book),
-            chapter: 0,
+            file,
+            book,
+            chapter_idx: 0,
+            chapter,
             progress: Page::default(),
         }
     }
@@ -185,8 +155,8 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
     }
 
     fn next_page(&mut self, _: Size) {
-        let Some(Book { chapters, .. } ) = &self.book else { return; };
-        let chapter = &chapters[self.chapter];
+        let Some(book) = &self.book else { return; };
+        let Some(chapter) = &self.chapter else { return; };
         let end = &self.progress.end;
         let at_end = end.paragraph as usize >= chapter.paragraphs.len();
         if !at_end {
@@ -194,15 +164,16 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
                 paragraph: end.paragraph,
                 line: end.line,
             };
-        } else if self.chapter + 1 < chapters.len() {
-            self.chapter += 1;
+        } else if self.chapter_idx + 1 < book.chapter_count() {
+            self.chapter_idx += 1;
+            self.chapter = book.chapter(self.chapter_idx, &mut self.file);
             self.progress.start = Progress { paragraph: 0, line: 0 };
         }
     }
 
     fn prev_page(&mut self, Size { width, height }: Size) {
-        let Some(Book { chapters, .. } ) = &self.book else { return; };
-        let chapter = &chapters[self.chapter];
+        let Some(book) = &self.book else { return; };
+        let Some(chapter) = &self.chapter else { return; };
         let padding = 10u32;
         let font = font::Font::new(font::FontFamily::Bookerly, self.font_size);
         let options = layout::Options::new(
@@ -212,7 +183,7 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
             self.language,
             font,
         );
-        let page_height = (height - padding) as u16;
+        let page_height = (height - padding - 10) as u16;
         if let Some(progress) = Self::compute_prev_page(
             chapter,
             self.progress.start,
@@ -220,20 +191,21 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
             page_height,
         ) {
             self.progress.start = progress;
-        } else if self.chapter > 0 {
-            self.chapter -= 1;
-            let chapter = &chapters[self.chapter];
+        } else if self.chapter_idx > 0 {
+            self.chapter_idx -= 1;
+            let Some(chapter) = book.chapter(self.chapter_idx, &mut self.file) else { return; };
             let last_para = chapter.paragraphs.len() - 1;
             let lines = layout::layout_text(options, &chapter.paragraphs[last_para].text);
             // Try to show the last 10 lines
             // NOTE: unless we lay out the entire chapter, there doesn't seem to be a sane way of getting
             // the correct line number. Fill the entire page :(
             self.progress.start = Self::compute_prev_page(
-                chapter,
+                &chapter,
                 Progress { paragraph: last_para as u16, line: lines.len() as u16 },
                 options,
                 page_height,
             ).unwrap_or(Progress { paragraph: last_para as u16, line: 0 });
+            self.chapter = Some(chapter);
         };
     }
 
@@ -398,13 +370,34 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
             .draw(buffers)
             .ok();
 
+        // Language
+        Text::new("Language:", Point::new(desc_pos, size.height as i32 / 2 + 170), text_style)
+            .draw(buffers)
+            .ok();
+        Text::new(&alloc::format!("{:?}", self.language), Point::new(value_pos, size.height as i32 / 2 + 170), text_style)
+            .draw(buffers)
+            .ok();
+
         // Justification debug lines
-        Text::new("Debug Justify:", Point::new(desc_pos, size.height as i32 / 2 + 170), text_style)
+        Text::new("Debug Justify:", Point::new(desc_pos, size.height as i32 / 2 + 200), text_style)
             .draw(buffers)
             .ok();
-        Text::new(if self.debug_width { "On" } else { "Off" }, Point::new(value_pos, size.height as i32 / 2 + 170), text_style)
+        Text::new(if self.debug_width { "On" } else { "Off" }, Point::new(value_pos, size.height as i32 / 2 + 200), text_style)
             .draw(buffers)
             .ok();
+    }
+
+    fn display_footer(&self, buffers: &mut DisplayBuffers) {
+        if self.show_settings {
+            return;
+        }
+        let size = buffers.size();
+        let text_style = MonoTextStyle::new(&FONT_10X20, BinaryColor::Off);
+        if let Some(title) = &self.chapter.as_ref().and_then(|c| c.title.as_deref()) {
+            Text::new(&title, Point::new(10, size.height as i32 - 10), text_style)
+                .draw(buffers)
+                .ok();
+        }
     }
 
     fn update_settings(&mut self, state: &super::ApplicationState) -> super::UpdateResult {
@@ -438,7 +431,14 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
                     };
                     return super::UpdateResult::SetRotation(new_rotation);
                 },
-                4 => self.debug_width = !self.debug_width,
+                4 => self.language = match self.language {
+                    hypher::Lang::English => hypher::Lang::French,
+                    hypher::Lang::French => hypher::Lang::German,
+                    hypher::Lang::German => hypher::Lang::Spanish,
+                    hypher::Lang::Spanish => hypher::Lang::English,
+                    _ => self.language, // Don't cycle unsupported languages
+                },
+                5 => self.debug_width = !self.debug_width,
                 _ => return super::UpdateResult::None
             }
             super::UpdateResult::Redraw
@@ -446,7 +446,7 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
             self.settings_cursor = if self.settings_cursor > 0 { self.settings_cursor - 1 } else { 0 };
             super::UpdateResult::Redraw
         } else if buttons.is_pressed(Buttons::Down) {
-            self.settings_cursor = if self.settings_cursor < 4 { self.settings_cursor + 1 } else { 4 };
+            self.settings_cursor = if self.settings_cursor < 5 { self.settings_cursor + 1 } else { 5 };
             super::UpdateResult::Redraw
         } else {
             super::UpdateResult::None
@@ -485,8 +485,8 @@ impl<Filesystem: crate::fs::Filesystem> super::Activity for ReaderActivity<Files
     }
 
     fn draw(&mut self, display: &mut dyn crate::display::Display, buffers: &mut DisplayBuffers) {
-        let Some(book) = &self.book else {
-            warn!("No book");
+        let Some(chapter) = &self.chapter else {
+            warn!("No chapter");
             return;
         };
         let padding = 10;
@@ -501,7 +501,6 @@ impl<Filesystem: crate::fs::Filesystem> super::Activity for ReaderActivity<Files
             font,
         );
 
-        let chapter = &book.chapters[self.chapter];
         let x_start = padding as u16;
         let y_advance = font.y_advance();
         let para_spacing = y_advance / 2;
@@ -509,7 +508,7 @@ impl<Filesystem: crate::fs::Filesystem> super::Activity for ReaderActivity<Files
         let page_height = if self.show_settings {
             (height / 2 - padding) as u16
         } else {
-            (height - padding) as u16
+            (height - padding - 10) as u16
         };
 
         // Collect lines forward from start, tracking pixel height with paragraph spacing
@@ -574,6 +573,7 @@ impl<Filesystem: crate::fs::Filesystem> super::Activity for ReaderActivity<Files
         buffers.clear(BinaryColor::On).ok();
         self.draw_layed_out_text(font, &all_lines, &y_offsets, x_start, y_start, font::Mode::Bw, buffers);
         self.display_settings(buffers);
+        self.display_footer(buffers);
         display.display(buffers, RefreshMode::Fast);
 
         buffers.clear(BinaryColor::Off).ok();

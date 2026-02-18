@@ -25,7 +25,7 @@ pub struct Application<'a, Filesystem> {
     dirty: bool,
     display_buffers: &'a mut DisplayBuffers,
     filesystem: Filesystem,
-    stack: heapless::Vec<ActivityType, 4>,
+    stack: heapless::Vec<ActivityType, 8>,
     activity: Box<dyn Activity>,
     activity_type: ActivityType,
     sleep: bool,

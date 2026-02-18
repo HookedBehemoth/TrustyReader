@@ -293,6 +293,14 @@ unsafe extern "C" {
     fn getnum() -> i32;
 }
 
+const FA_READ: BYTE = 0x01;
+const FA_WRITE: BYTE = 0x02;
+const FA_OPEN_EXISTING: BYTE = 0x00;
+const FA_CREATE_NEW: BYTE = 0x04;
+const FA_CREATE_ALWAYS: BYTE = 0x08;
+const FA_OPEN_ALWAYS: BYTE = 0x10;
+const FA_OPEN_APPEND: BYTE = 0x30;
+
 #[derive(Clone)]
 pub struct FatFs;
 
@@ -331,9 +339,9 @@ impl Filesystem for FatFs {
     ) -> Result<Self::File, Self::Error> {
         let path = null_terminate(path);
         let mode = match mode {
-            Mode::Read => 1,
-            Mode::Write => 2,
-            Mode::ReadWrite => 3,
+            Mode::Read => FA_READ | FA_OPEN_EXISTING,
+            Mode::Write => FA_WRITE | FA_CREATE_ALWAYS,
+            Mode::ReadWrite => FA_READ | FA_WRITE | FA_OPEN_ALWAYS,
         };
         unsafe {
             let mut f: FIL = core::mem::zeroed();

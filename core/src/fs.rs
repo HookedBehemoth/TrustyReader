@@ -4,8 +4,11 @@ use alloc::vec::Vec;
 use embedded_io::{ErrorType, Read, Seek, Write};
 
 pub enum Mode {
+    // Read
     Read,
+    // Write | Create | Truncate
     Write,
+    // Read | Write | Create
     ReadWrite,
 }
 
@@ -44,6 +47,12 @@ pub trait File: Read + Write + Seek {
         };
         self.write_all(buf)?;
         Ok(())
+    }
+    fn read_to_end(&mut self) -> core::result::Result<Vec<u8>, Self::Error> {
+        let mut buf = Vec::new();
+        buf.resize(self.size(), 0x00);
+        self.read(buf.as_mut_slice())?;
+        Ok(buf)
     }
 }
 
