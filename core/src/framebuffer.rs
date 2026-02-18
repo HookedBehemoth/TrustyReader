@@ -21,10 +21,27 @@ pub enum Rotation {
     Rotate270,
 }
 
+impl Rotation {
+    pub fn repr(self) -> &'static str {
+        match self {
+            Rotation::Rotate0 => "0°",
+            Rotation::Rotate90 => "90°",
+            Rotation::Rotate180 => "180°",
+            Rotation::Rotate270 => "270°",
+        }
+    }
+    pub fn size(self) -> Size {
+        match self {
+            Rotation::Rotate0 | Rotation::Rotate180 => Size::new(WIDTH as u32, HEIGHT as u32),
+            Rotation::Rotate90 | Rotation::Rotate270 => Size::new(HEIGHT as u32, WIDTH as u32),
+        }
+    }
+}
+
 pub struct DisplayBuffers {
     framebuffer: [[u8; BUFFER_SIZE]; 2],
     active: bool,
-    rotation: Rotation,
+    pub rotation: Rotation,
 }
 
 impl Default for DisplayBuffers {
@@ -115,10 +132,7 @@ impl DisplayBuffers {
 
 impl OriginDimensions for DisplayBuffers {
     fn size(&self) -> Size {
-        match self.rotation {
-            Rotation::Rotate0 | Rotation::Rotate180 => Size::new(WIDTH as u32, HEIGHT as u32),
-            Rotation::Rotate90 | Rotation::Rotate270 => Size::new(HEIGHT as u32, WIDTH as u32),
-        }
+        self.rotation.size()
     }
 }
 

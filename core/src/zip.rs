@@ -365,6 +365,22 @@ impl<'a, R: crate::fs::File> ZipEntryReader<'a, R> {
         result.truncate(offset);
         Ok(result)
     }
+
+    pub fn skip(&mut self, n: u64) -> Result<u64, ZipError> {
+        let mut buf = [0u8; 512];
+        let mut remaining = n;
+
+        while remaining > 0 {
+            let to_read = core::cmp::min(buf.len(), remaining as _);
+            let read = self.read(&mut buf[..to_read])?;
+            if read == 0 {
+                break;
+            }
+            remaining -= read as u64;
+        }
+
+        Ok(n - remaining)
+    }
 }
 
 /// Convenience function to read an entire zip entry into a Vec
@@ -385,3 +401,13 @@ impl<Reader: crate::fs::File> embedded_io::Read for ZipEntryReader<'_, Reader> {
         self.read(buf)
     }
 }
+
+impl<Reader: crate::fs::File> embedded_io::Seek for ZipEntryReader<'_, Reader> {
+    fn seek(&mut self, pos: embedded_io::SeekFrom) -> Result<u64, Self::Error> {
+        match pos {
+            SeekFrom::Current(n) => self.skip(n as _),
+            _ => Err(ZipError::IoError)
+        }
+    }
+}
+

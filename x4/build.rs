@@ -10,7 +10,10 @@ fn main() {
         .file("fatfs/ffunicode.c")
         .file("fatfs/compat.c")
         .compile("fatfs");
+    println!("cargo:rerun-if-changed=fatfs/diskio.h");
     println!("cargo:rerun-if-changed=fatfs/ff.c");
+    println!("cargo:rerun-if-changed=fatfs/ff.h");
+    println!("cargo:rerun-if-changed=fatfs/ffconf.h");
     println!("cargo:rerun-if-changed=fatfs/ffsystem.c");
     println!("cargo:rerun-if-changed=fatfs/ffunicode.c");
     println!("cargo:rerun-if-changed=fatfs/compat.c");

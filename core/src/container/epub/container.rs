@@ -26,7 +26,7 @@ pub(super) fn parse(file: &mut impl File, entries: &[ZipFileEntry]) -> Result<St
         trace!("Event: {event:?}");
 
         match event {
-            XmlEvent::StartElement { name: "rootfile", mut attrs } => {
+            XmlEvent::StartElement { name: "rootfile", attrs } => {
                 return attrs
                     .get("full-path")
                     .map(|s| s.to_owned())

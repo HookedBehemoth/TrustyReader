@@ -86,7 +86,7 @@ fn parse_nav_map<R: Read>(
                 );
                 depth += 1;
             }
-            XmlEvent::StartElement { name: "content", mut attrs } => {
+            XmlEvent::StartElement { name: "content", attrs } => {
                 let src = attrs.get("src").ok_or(EpubError::InvalidData)?;
                 let mut parts = src.splitn(2, '#');
                 let file_path = parts.next().ok_or(EpubError::InvalidData)?;

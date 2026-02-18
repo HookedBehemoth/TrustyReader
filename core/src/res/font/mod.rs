@@ -3,12 +3,23 @@ use log::{trace, warn};
 
 use crate::framebuffer::DisplayBuffers;
 
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum FontSize {
     Size26,
     Size28,
     Size30,
 }
+impl FontSize {
+    pub fn repr(self) -> &'static str {
+        match self {
+            FontSize::Size26 => "26",
+            FontSize::Size28 => "28",
+            FontSize::Size30 => "30",
+        }
+    }
+}
 
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum FontStyle {
     Regular,
     Bold,
@@ -16,8 +27,16 @@ pub enum FontStyle {
     BoldItalic,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum FontFamily {
     Bookerly,
+}
+impl FontFamily {
+    pub fn repr(self) -> &'static str {
+        match self {
+            FontFamily::Bookerly => "Bookerly",
+        }
+    }
 }
 
 pub mod bookerly_26;
@@ -32,6 +51,52 @@ pub mod bookerly_bold_italic_30;
 pub mod bookerly_italic_26;
 pub mod bookerly_italic_28;
 pub mod bookerly_italic_30;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct Font {
+    pub family: FontFamily,
+    pub size: FontSize,
+}
+
+impl Font {
+    pub fn new(family: FontFamily, size: FontSize) -> Self {
+        Self { family, size }
+    }
+
+    pub fn y_advance(&self) -> u16 {
+        match self.size {
+            FontSize::Size26 => 30,
+            FontSize::Size28 => 32,
+            FontSize::Size30 => 34,
+        }
+    }
+
+    pub fn bookerly(size: FontSize) -> Self {
+        Self { family: FontFamily::Bookerly, size }
+    }
+}
+
+impl Font {
+    pub fn definition(&self, style: FontStyle) -> &'static FontDefinition<'static> {
+        use FontFamily::*;
+        use FontSize::*;
+        use FontStyle::*;
+        match (&self.family, &self.size, &style) {
+            (Bookerly, Size26, Regular) => &bookerly_26::FONT,
+            (Bookerly, Size28, Regular) => &bookerly_28::FONT,
+            (Bookerly, Size30, Regular) => &bookerly_30::FONT,
+            (Bookerly, Size26, Bold) => &bookerly_bold_26::FONT,
+            (Bookerly, Size28, Bold) => &bookerly_bold_28::FONT,
+            (Bookerly, Size30, Bold) => &bookerly_bold_30::FONT,
+            (Bookerly, Size26, BoldItalic) => &bookerly_bold_italic_26::FONT,
+            (Bookerly, Size28, BoldItalic) => &bookerly_bold_italic_28::FONT,
+            (Bookerly, Size30, BoldItalic) => &bookerly_bold_italic_30::FONT,
+            (Bookerly, Size26, Italic) => &bookerly_italic_26::FONT,
+            (Bookerly, Size28, Italic) => &bookerly_italic_28::FONT,
+            (Bookerly, Size30, Italic) => &bookerly_italic_30::FONT,
+        }
+    }
+}
 
 #[repr(C)]
 pub struct FontDefinition<'a> {

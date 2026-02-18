@@ -41,6 +41,7 @@ pub struct Epub {
     pub spine: Vec<opf::SpineItem>,
     pub metadata: opf::Metadata,
     pub toc: Option<ncx::TableOfContents>,
+    pub cover: Option<u16>,
 }
 
 type PathBuf = heapless::String<256>;

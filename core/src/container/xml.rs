@@ -342,9 +342,8 @@ impl<'a> AttributeReader<'a> {
     }
 
     /// Case-insensitive
-    /// Careful: mutates internal iterator
-    pub fn get(&mut self, name: &str) -> Option<&str> {
-        for (n, v) in self {
+    pub fn get(&self, name: &str) -> Option<&str> {
+        for (n, v) in self.clone() {
             if n.eq_ignore_ascii_case(name) {
                 return Some(v);
             }
@@ -385,7 +384,7 @@ mod tests {
         let mut element_stack = heapless::Vec::<String, 10>::new();
         loop {
             match parser.next_event().unwrap() {
-                XmlEvent::Declaration { mut attrs } => {
+                XmlEvent::Declaration { attrs } => {
                     trace!("--Declaration");
                     assert_eq!(attrs.get("version"), Some("1.0"));
                     assert!(
@@ -534,13 +533,13 @@ mod tests {
             </root>";
         let mut data = xml.as_bytes();
         let mut parser = XmlParser::new(&mut data, xml.len(), 512).unwrap();
-        let Declaration { mut attrs } = parser.next_event().unwrap() else {
+        let Declaration { attrs } = parser.next_event().unwrap() else {
             panic!("Expected declaration");
         };
         assert_eq!(attrs.get("version"), Some("1.0"));
         assert_eq!(attrs.get("encoding"), Some("UTF-8"));
         assert_eq!(attrs.get("standalone"), Some("yes"));
-        let StartElement { name: "root", mut attrs } = parser.next_event().unwrap() else {
+        let StartElement { name: "root", attrs } = parser.next_event().unwrap() else {
             panic!("Expected start element");
         };
         assert_eq!(attrs.get("attr1"), Some("value1"));

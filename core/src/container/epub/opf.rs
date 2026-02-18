@@ -57,6 +57,7 @@ pub struct Metadata {
     pub title: String,
     pub author: Option<String>,
     pub language: Option<hypher::Lang>,
+    pub cover_id: Option<String>,
 }
 
 pub fn parse(file: &mut impl File, file_resolver: FileResolver, rootfile: &str) -> Result<Epub> {
@@ -66,18 +67,21 @@ pub fn parse(file: &mut impl File, file_resolver: FileResolver, rootfile: &str) 
     let reader = ZipEntryReader::new(file, entry)?;
     let mut parser = XmlParser::new(reader, entry.size as _, 4096)?;
 
+    let mut metadata = None;
     let mut manifest = BTreeMap::<String, ManifestItem>::new();
     let mut spine = Vec::<SpineItem>::new();
-    let mut metadata = None;
     let mut ncx_toc_entry = None;
 
     loop {
         let event = parser.next_event()?;
         match event {
+            XmlEvent::StartElement { name: "metadata", .. } => {
+                metadata = Some(parse_metadata(&mut parser)?);
+            }
             XmlEvent::StartElement { name: "manifest", .. } => {
                 manifest = parse_manifest(&mut parser, &file_resolver)?;
             }
-            XmlEvent::StartElement { name: "spine", mut attrs } => {
+            XmlEvent::StartElement { name: "spine", attrs } => {
                 if let Some(entry) = attrs.get("toc").and_then(|v| manifest.get(v)) {
                     if entry.media_type == MediaType::Ncx {
                         ncx_toc_entry = Some(entry.file_idx);
@@ -87,14 +91,18 @@ pub fn parse(file: &mut impl File, file_resolver: FileResolver, rootfile: &str) 
                 }
                 spine = parse_spine(&mut parser, &manifest)?
             }
-            XmlEvent::StartElement { name: "metadata", .. } => {
-                metadata = Some(parse_metadata(&mut parser)?);
-            }
             XmlEvent::EndOfFile => break,
             _ => {}
         }
     }
     drop(parser);
+
+    let cover = metadata
+        .as_ref()
+        .and_then(|m| m.cover_id.as_deref())
+        .and_then(|cover_id| manifest.get(cover_id))
+        .map(|item| item.file_idx);
+
     drop(manifest);
 
     let toc = if let Some(entry) = ncx_toc_entry {
@@ -121,6 +129,7 @@ pub fn parse(file: &mut impl File, file_resolver: FileResolver, rootfile: &str) 
         spine,
         metadata: metadata.ok_or(EpubError::InvalidData)?,
         toc,
+        cover,
     };
     Ok(epub)
 }
@@ -131,6 +140,7 @@ fn parse_metadata<R: embedded_io::Read>(parser: &mut XmlParser<R>) -> Result<Met
     let mut title = None;
     let mut author = None;
     let mut language = None;
+    let mut cover_id = None;
     loop {
         match parser.next_event()? {
             XmlEvent::StartElement { name: "dc:title", .. } => {
@@ -154,6 +164,13 @@ fn parse_metadata<R: embedded_io::Read>(parser: &mut XmlParser<R>) -> Result<Met
                 };
                 language = hypher::Lang::from_iso(code);
             }
+            XmlEvent::StartElement { name: "meta", attrs } => {
+                if attrs.get("name") == Some("cover")
+                    && let Some(content) = attrs.get("content")
+                {
+                    cover_id = Some(content.to_owned());
+                }
+            }
             XmlEvent::EndElement { name: "metadata" } => {
                 break;
             }
@@ -166,6 +183,7 @@ fn parse_metadata<R: embedded_io::Read>(parser: &mut XmlParser<R>) -> Result<Met
         title: title.ok_or(EpubError::InvalidData)?,
         author,
         language,
+        cover_id,
     })
 }
 
@@ -179,11 +197,11 @@ fn parse_manifest<R: embedded_io::Read>(
 
     loop {
         match parser.next_event()? {
-            XmlEvent::StartElement { name: "item", mut attrs } => {
+            XmlEvent::StartElement { name: "item", attrs } => {
                 let mut id = None;
                 let mut file_idx = None;
                 let mut media_type = None;
-                while let Some((name, value)) = attrs.next() {
+                for (name, value) in attrs {
                     match name {
                         "href" => file_idx = file_resolver.content_idx(value),
                         "id" => id = Some(value.to_owned()),
@@ -216,7 +234,7 @@ fn parse_spine<R: embedded_io::Read>(
 
     loop {
         match parser.next_event()? {
-            XmlEvent::StartElement { name: "itemref", mut attrs } => {
+            XmlEvent::StartElement { name: "itemref", attrs } => {
                 if let Some(value) = attrs.get("idref") {
                     match manifest.get(value) {
                         Some(ManifestItem { file_idx, .. }) => {

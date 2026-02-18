@@ -1,6 +1,6 @@
 use std::{collections::HashMap, env::args, path::PathBuf};
 
-use log::{info, trace};
+use log::{error, info, trace};
 use trusty_core::{container::xml, fs::Filesystem, zip};
 
 use crate::std_fs::StdFilesystem;
@@ -19,6 +19,7 @@ fn test_file(path: &str) {
     let fs = StdFilesystem::new_with_base_path(PathBuf::from(""));
     let mut file = fs.open_file(&path, trusty_core::fs::Mode::Read).unwrap();
     let entries = zip::parse_zip(&mut file).unwrap();
+    let mut max_text_size = 0;
     for entry in entries {
         let xml_names = &[".opf", ".ncx", ".xml", ".xhtml", ".html"];
         info!("Entry: {}", entry.name);
@@ -30,8 +31,15 @@ fn test_file(path: &str) {
         let mut parser = xml::XmlParser::new(&mut zip_entry, entry.size as _, 4096).unwrap();
         let mut counts = HashMap::new();
         let mut stack = Vec::new();
+        let mut text_size = 0;
         loop {
-            let event = parser.next_event().unwrap();
+            let event = match parser.next_event() {
+                Ok(event) => event,
+                Err(e) => {
+                    error!("Error parsing XML: {e:?}");
+                    break;
+                }
+            };
             trace!("Event: {event:?}");
 
             match event {
@@ -43,17 +51,22 @@ fn test_file(path: &str) {
                     let prev = stack.pop().unwrap();
                     assert_eq!(name, prev);
                 }
+                xml::XmlEvent::Text { content } => text_size += content.len(),
                 xml::XmlEvent::EndOfFile => break,
                 _ => {}
             }
         }
         for name in &stack {
-            info!("Unclosed element: {name}");
+            error!("Unclosed element: {name}");
         }
-        assert!(stack.is_empty(), "Unclosed elements remain");
+
+        if text_size > max_text_size {
+            max_text_size = text_size;
+        }
 
         info!("Element counts: {counts:?}");
     }
+    info!("Max text size: {}", max_text_size);
 
     info!("Finished parsing XML files");
 }

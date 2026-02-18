@@ -13,7 +13,7 @@ use embedded_graphics::{
     mono_font::{MonoTextStyle, ascii::FONT_10X20},
     pixelcolor::BinaryColor,
     prelude::{DrawTarget, OriginDimensions, Point, Primitive, Size},
-    primitives::{Circle, PrimitiveStyle, Rectangle},
+    primitives::{Circle, Line, PrimitiveStyle, Rectangle},
     text::Text,
 };
 use log::info;
@@ -25,7 +25,7 @@ pub struct DemoActivity {
 
 impl DemoActivity {
     pub fn new() -> Self {
-        Self { screen: 0, full_refresh: true }
+        Self { screen: 10, full_refresh: true }
     }
 
     fn draw_bebop(&self, display: &mut dyn Display, buffers: &mut DisplayBuffers) {
@@ -272,7 +272,8 @@ impl DemoActivity {
         &self,
         display: &mut dyn Display,
         buffers: &mut DisplayBuffers,
-        font: &font::FontDefinition,
+        font: font::Font,
+        style: font::FontStyle,
     ) {
         let size = buffers.size();
         info!(
@@ -297,6 +298,7 @@ impl DemoActivity {
 
         let lines = crate::layout::layout_text(options, text);
 
+        let font = font.definition(style);
         buffers.clear(BinaryColor::On).ok();
         Self::draw_layed_out_text(font, &lines, x_start, font::Mode::Bw, buffers);
         display.display(
@@ -327,8 +329,10 @@ impl DemoActivity {
     ) {
         let size = display_buffers.size();
 
+        let mut y = font.y_advance as u16;
+
         for line in lines.iter() {
-            if line.y as u32 >= size.height {
+            if y as u32 >= size.height {
                 break;
             }
             let mut x_advance = 0u16;
@@ -340,21 +344,21 @@ impl DemoActivity {
                         codepoint as _,
                         display_buffers,
                         x_advance as isize,
-                        line.y as isize,
+                        y as isize,
                         mode,
                     ) {
-                        // Line::new(
-                        //     Point {
-                        //         x: x_advance as _,
-                        //         y: (line.y + 3) as _,
-                        //     },
-                        //     Point {
-                        //         x: (x_advance + glyph_width as u16) as _,
-                        //         y: (line.y + 3) as _,
-                        //     },
-                        // )
-                        // .into_styled(PrimitiveStyle::with_stroke(BinaryColor::Off, 1))
-                        // .draw(display_buffers);
+                        Line::new(
+                            Point {
+                                x: x_advance as _,
+                                y: (y + 3) as _,
+                            },
+                            Point {
+                                x: (x_advance + glyph_width as u16) as _,
+                                y: (y + 3) as _,
+                            },
+                        )
+                        .into_styled(PrimitiveStyle::with_stroke(BinaryColor::Off, 1))
+                        .draw(display_buffers);
                         x_advance += glyph_width as u16;
                     }
                 }
@@ -365,11 +369,12 @@ impl DemoActivity {
                     '-' as _,
                     display_buffers,
                     x_advance as isize,
-                    line.y as isize,
+                    y as isize,
                     font::Mode::Bw,
                 )
                 .unwrap();
             }
+            y += font.y_advance as u16;
         }
     }
 }
@@ -416,6 +421,7 @@ impl super::Activity for DemoActivity {
     }
 
     fn draw(&mut self, display: &mut dyn Display, buffers: &mut DisplayBuffers) {
+        use font::{FontSize::*, FontStyle::*, Font};
         match self.screen {
             1 => self.draw_test_image(display, buffers),
             2 => self.draw_bebop(display, buffers),
@@ -424,18 +430,18 @@ impl super::Activity for DemoActivity {
             5 => self.draw_xth(display, buffers, GrayscaleMode::Fast),
             6 => self.draw_xtg(display, buffers),
             7 => self.draw_text(display, buffers),
-            8 => self.draw_layouted_text(display, buffers, &font::bookerly_26::FONT),
-            9 => self.draw_layouted_text(display, buffers, &font::bookerly_28::FONT),
-            10 => self.draw_layouted_text(display, buffers, &font::bookerly_30::FONT),
-            11 => self.draw_layouted_text(display, buffers, &font::bookerly_italic_26::FONT),
-            12 => self.draw_layouted_text(display, buffers, &font::bookerly_italic_28::FONT),
-            13 => self.draw_layouted_text(display, buffers, &font::bookerly_italic_30::FONT),
-            14 => self.draw_layouted_text(display, buffers, &font::bookerly_bold_26::FONT),
-            15 => self.draw_layouted_text(display, buffers, &font::bookerly_bold_28::FONT),
-            16 => self.draw_layouted_text(display, buffers, &font::bookerly_bold_30::FONT),
-            17 => self.draw_layouted_text(display, buffers, &font::bookerly_bold_italic_26::FONT),
-            18 => self.draw_layouted_text(display, buffers, &font::bookerly_bold_italic_28::FONT),
-            19 => self.draw_layouted_text(display, buffers, &font::bookerly_bold_italic_30::FONT),
+            8 => self.draw_layouted_text(display, buffers, Font::bookerly(Size26), Regular),
+            9 => self.draw_layouted_text(display, buffers, Font::bookerly(Size28), Regular),
+            10 => self.draw_layouted_text(display, buffers, Font::bookerly(Size30), Regular),
+            11 => self.draw_layouted_text(display, buffers, Font::bookerly(Size26), Italic),
+            12 => self.draw_layouted_text(display, buffers, Font::bookerly(Size28), Italic),
+            13 => self.draw_layouted_text(display, buffers, Font::bookerly(Size30), Italic),
+            14 => self.draw_layouted_text(display, buffers, Font::bookerly(Size26), Bold),
+            15 => self.draw_layouted_text(display, buffers, Font::bookerly(Size28), Bold),
+            16 => self.draw_layouted_text(display, buffers, Font::bookerly(Size30), Bold),
+            17 => self.draw_layouted_text(display, buffers, Font::bookerly(Size26), BoldItalic),
+            18 => self.draw_layouted_text(display, buffers, Font::bookerly(Size28), BoldItalic),
+            19 => self.draw_layouted_text(display, buffers, Font::bookerly(Size30), BoldItalic),
             _ => self.draw_shapes(display, buffers),
         }
         self.full_refresh = false;
