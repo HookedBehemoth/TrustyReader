@@ -155,8 +155,10 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
     }
 
     fn next_page(&mut self, _: Size) {
-        let Some(book) = &self.book else { return; };
-        let Some(chapter) = &self.chapter else { return; };
+        let Some(chapter) = &self.chapter else {
+            self.next_chapter();
+            return;
+        };
         let end = &self.progress.end;
         let at_end = end.paragraph as usize >= chapter.paragraphs.len();
         if !at_end {
@@ -164,16 +166,22 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
                 paragraph: end.paragraph,
                 line: end.line,
             };
-        } else if self.chapter_idx + 1 < book.chapter_count() {
-            self.chapter_idx += 1;
-            self.chapter = book.chapter(self.chapter_idx, &mut self.file);
-            self.progress.start = Progress { paragraph: 0, line: 0 };
+        } else {
+            self.next_chapter();
         }
     }
 
-    fn prev_page(&mut self, Size { width, height }: Size) {
+    fn next_chapter(&mut self) {
         let Some(book) = &self.book else { return; };
-        let Some(chapter) = &self.chapter else { return; };
+        if self.chapter_idx + 1 >= book.chapter_count() {
+            return;
+        }
+        self.chapter_idx += 1;
+        self.chapter = book.chapter(self.chapter_idx, &mut self.file);
+        self.progress.start = Progress { paragraph: 0, line: 0 };
+    }
+
+    fn prev_page(&mut self, Size { width, height }: Size) {
         let padding = 10u32;
         let font = font::Font::new(font::FontFamily::Bookerly, self.font_size);
         let options = layout::Options::new(
@@ -184,6 +192,10 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
             font,
         );
         let page_height = (height - padding - 10) as u16;
+        let Some(chapter) = &self.chapter else {
+            self.prev_chapter(options, page_height);
+            return;
+        };
         if let Some(progress) = Self::compute_prev_page(
             chapter,
             self.progress.start,
@@ -191,22 +203,30 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
             page_height,
         ) {
             self.progress.start = progress;
-        } else if self.chapter_idx > 0 {
-            self.chapter_idx -= 1;
-            let Some(chapter) = book.chapter(self.chapter_idx, &mut self.file) else { return; };
-            let last_para = chapter.paragraphs.len() - 1;
-            let lines = layout::layout_text(options, &chapter.paragraphs[last_para].text);
-            // Try to show the last 10 lines
-            // NOTE: unless we lay out the entire chapter, there doesn't seem to be a sane way of getting
-            // the correct line number. Fill the entire page :(
-            self.progress.start = Self::compute_prev_page(
-                &chapter,
-                Progress { paragraph: last_para as u16, line: lines.len() as u16 },
-                options,
-                page_height,
-            ).unwrap_or(Progress { paragraph: last_para as u16, line: 0 });
-            self.chapter = Some(chapter);
+        } else {
+            self.prev_chapter(options, page_height);
         };
+    }
+
+    fn prev_chapter(&mut self, options: layout::Options, page_height: u16) {
+        let Some(book) = &self.book else { return; };
+        if self.chapter_idx == 0 {
+            return;
+        }
+        self.chapter_idx -= 1;
+        let Some(chapter) = book.chapter(self.chapter_idx, &mut self.file) else { return; };
+        let last_para = chapter.paragraphs.len() - 1;
+        let lines = layout::layout_text(options, &chapter.paragraphs[last_para].text);
+        // Try to show the last 10 lines
+        // NOTE: unless we lay out the entire chapter, there doesn't seem to be a sane way of getting
+        // the correct line number. Fill the entire page :(
+        self.progress.start = Self::compute_prev_page(
+            &chapter,
+            Progress { paragraph: last_para as u16, line: lines.len() as u16 },
+            options,
+            page_height,
+        ).unwrap_or(Progress { paragraph: last_para as u16, line: 0 });
+        self.chapter = Some(chapter);
     }
 
     /// Compute the previous page start by laying out paragraphs backwards

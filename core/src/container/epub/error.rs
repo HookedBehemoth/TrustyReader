@@ -1,4 +1,6 @@
-use crate::{container::xml::XmlError, zip::ZipError};
+use crate::zip::ZipError;
+
+use embedded_xml as xml;
 
 #[derive(Debug)]
 pub enum RequiredFileTypes {
@@ -9,7 +11,7 @@ pub enum RequiredFileTypes {
 #[derive(Debug)]
 pub enum EpubError {
     ZipError(ZipError),
-    XmlError(XmlError),
+    XmlError(xml::Error),
     FileMissing(RequiredFileTypes),
     InvalidData,
 }
@@ -20,8 +22,8 @@ impl From<ZipError> for EpubError {
     }
 }
 
-impl From<XmlError> for EpubError {
-    fn from(err: XmlError) -> Self {
+impl From<xml::Error> for EpubError {
+    fn from(err: xml::Error) -> Self {
         EpubError::XmlError(err)
     }
 }

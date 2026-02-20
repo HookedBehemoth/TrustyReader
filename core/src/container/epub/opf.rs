@@ -7,16 +7,14 @@ use alloc::{
 use log::{error, info};
 
 use crate::{
-    container::{
-        epub::{
-            Epub, FileResolver,
-            error::{EpubError, RequiredFileTypes},
-        },
-        xml::{XmlEvent, XmlParser},
+    container::epub::{
+        Epub, FileResolver,
+        error::{EpubError, RequiredFileTypes},
     },
     fs::File,
     zip::ZipEntryReader,
 };
+use embedded_xml as xml;
 
 use super::Result;
 
@@ -65,7 +63,7 @@ pub fn parse(file: &mut impl File, file_resolver: FileResolver, rootfile: &str) 
         .file(rootfile)
         .ok_or(EpubError::FileMissing(RequiredFileTypes::ContentOpf))?;
     let reader = ZipEntryReader::new(file, entry)?;
-    let mut parser = XmlParser::new(reader, entry.size as _, 4096)?;
+    let mut parser = xml::Reader::new(reader, entry.size as _, 4096)?;
 
     let mut metadata = None;
     let mut manifest = BTreeMap::<String, ManifestItem>::new();
@@ -75,13 +73,13 @@ pub fn parse(file: &mut impl File, file_resolver: FileResolver, rootfile: &str) 
     loop {
         let event = parser.next_event()?;
         match event {
-            XmlEvent::StartElement { name: "metadata", .. } => {
+            xml::Event::StartElement { name: "metadata", .. } => {
                 metadata = Some(parse_metadata(&mut parser)?);
             }
-            XmlEvent::StartElement { name: "manifest", .. } => {
+            xml::Event::StartElement { name: "manifest", .. } => {
                 manifest = parse_manifest(&mut parser, &file_resolver)?;
             }
-            XmlEvent::StartElement { name: "spine", attrs } => {
+            xml::Event::StartElement { name: "spine", attrs } => {
                 if let Some(entry) = attrs.get("toc").and_then(|v| manifest.get(v)) {
                     if entry.media_type == MediaType::Ncx {
                         ncx_toc_entry = Some(entry.file_idx);
@@ -91,7 +89,7 @@ pub fn parse(file: &mut impl File, file_resolver: FileResolver, rootfile: &str) 
                 }
                 spine = parse_spine(&mut parser, &manifest)?
             }
-            XmlEvent::EndOfFile => break,
+            xml::Event::EndOfFile => break,
             _ => {}
         }
     }
@@ -134,7 +132,7 @@ pub fn parse(file: &mut impl File, file_resolver: FileResolver, rootfile: &str) 
     Ok(epub)
 }
 
-fn parse_metadata<R: embedded_io::Read>(parser: &mut XmlParser<R>) -> Result<Metadata> {
+fn parse_metadata<R: embedded_io::Read>(parser: &mut xml::OwnedReader<R>) -> Result<Metadata> {
     info!("Parsing metadata");
 
     let mut title = None;
@@ -143,20 +141,20 @@ fn parse_metadata<R: embedded_io::Read>(parser: &mut XmlParser<R>) -> Result<Met
     let mut cover_id = None;
     loop {
         match parser.next_event()? {
-            XmlEvent::StartElement { name: "dc:title", .. } => {
-                let XmlEvent::Text { content } = parser.next_event()? else {
+            xml::Event::StartElement { name: "dc:title", .. } => {
+                let xml::Event::Text { content } = parser.next_event()? else {
                     return Err(EpubError::InvalidData);
                 };
                 title = Some(content.to_string());
             }
-            XmlEvent::StartElement { name: "dc:creator", .. } => {
-                let XmlEvent::Text { content } = parser.next_event()? else {
+            xml::Event::StartElement { name: "dc:creator", .. } => {
+                let xml::Event::Text { content } = parser.next_event()? else {
                     return Err(EpubError::InvalidData);
                 };
                 author = Some(content.to_string());
             }
-            XmlEvent::StartElement { name: "dc:language", .. } => {
-                let XmlEvent::Text { content } = parser.next_event()? else {
+            xml::Event::StartElement { name: "dc:language", .. } => {
+                let xml::Event::Text { content } = parser.next_event()? else {
                     return Err(EpubError::InvalidData);
                 };
                 let Ok(code) = content.as_bytes()[..].try_into() else {
@@ -164,17 +162,17 @@ fn parse_metadata<R: embedded_io::Read>(parser: &mut XmlParser<R>) -> Result<Met
                 };
                 language = hypher::Lang::from_iso(code);
             }
-            XmlEvent::StartElement { name: "meta", attrs } => {
+            xml::Event::StartElement { name: "meta", attrs } => {
                 if attrs.get("name") == Some("cover")
                     && let Some(content) = attrs.get("content")
                 {
                     cover_id = Some(content.to_owned());
                 }
             }
-            XmlEvent::EndElement { name: "metadata" } => {
+            xml::Event::EndElement { name: "metadata" } => {
                 break;
             }
-            XmlEvent::EndOfFile => return Err(EpubError::InvalidData),
+            xml::Event::EndOfFile => return Err(EpubError::InvalidData),
             _ => {}
         }
     }
@@ -188,7 +186,7 @@ fn parse_metadata<R: embedded_io::Read>(parser: &mut XmlParser<R>) -> Result<Met
 }
 
 fn parse_manifest<R: embedded_io::Read>(
-    parser: &mut XmlParser<R>,
+    parser: &mut xml::OwnedReader<R>,
     file_resolver: &FileResolver,
 ) -> Result<BTreeMap<String, ManifestItem>> {
     info!("Parsing manifest");
@@ -197,7 +195,7 @@ fn parse_manifest<R: embedded_io::Read>(
 
     loop {
         match parser.next_event()? {
-            XmlEvent::StartElement { name: "item", attrs } => {
+            xml::Event::StartElement { name: "item", attrs } => {
                 let mut id = None;
                 let mut file_idx = None;
                 let mut media_type = None;
@@ -213,10 +211,10 @@ fn parse_manifest<R: embedded_io::Read>(
                     manifest.insert(id, ManifestItem { media_type, file_idx });
                 }
             }
-            XmlEvent::EndElement { name: "manifest" } => {
+            xml::Event::EndElement { name: "manifest" } => {
                 break;
             }
-            XmlEvent::EndOfFile => return Err(EpubError::InvalidData),
+            xml::Event::EndOfFile => return Err(EpubError::InvalidData),
             _ => {}
         }
     }
@@ -225,7 +223,7 @@ fn parse_manifest<R: embedded_io::Read>(
 }
 
 fn parse_spine<R: embedded_io::Read>(
-    parser: &mut XmlParser<R>,
+    parser: &mut xml::OwnedReader<R>,
     manifest: &BTreeMap<String, ManifestItem>,
 ) -> Result<Vec<SpineItem>> {
     info!("Parsing spine");
@@ -234,7 +232,7 @@ fn parse_spine<R: embedded_io::Read>(
 
     loop {
         match parser.next_event()? {
-            XmlEvent::StartElement { name: "itemref", attrs } => {
+            xml::Event::StartElement { name: "itemref", attrs } => {
                 if let Some(value) = attrs.get("idref") {
                     match manifest.get(value) {
                         Some(ManifestItem { file_idx, .. }) => {
@@ -244,10 +242,10 @@ fn parse_spine<R: embedded_io::Read>(
                     }
                 }
             }
-            XmlEvent::EndElement { name: "spine" } => {
+            xml::Event::EndElement { name: "spine" } => {
                 break;
             }
-            XmlEvent::EndOfFile => return Err(EpubError::InvalidData),
+            xml::Event::EndOfFile => return Err(EpubError::InvalidData),
             _ => {}
         }
     }

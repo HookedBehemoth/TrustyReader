@@ -26,3 +26,4 @@ embedded-io = { workspace = true, features = ["std"] }
 argh = "0.1.13"
 image = { version = "0.25.9", features = ["png", "jpeg", "bmp"], default-features = false }
 fontdue = "0.9.3"
+embedded-xml.workspace = true

@@ -1,13 +1,14 @@
 use alloc::{
     borrow::ToOwned, string::{String, ToString}, vec::Vec
 };
-use log::info;
+use log::{info, trace};
 
 use crate::{
-    container::{epub, xml::{self, XmlEvent}},
+    container::epub,
     fs::File,
     zip::ZipEntryReader,
 };
+use embedded_xml::{Event, Reader};
 
 enum BookFormat {
     PlainText(String, String),
@@ -96,7 +97,9 @@ impl Chapter {
         Chapter { title: None, paragraphs }
     }
     fn from_epub(epub: &epub::Epub, index: usize, file: &mut impl File) -> Option<Self> {
+        info!("Loading chapter {} from EPUB", index);
         let chapter = epub.spine.get(index)?;
+        info!("Chapter file index: {}", chapter.file_idx);
         // TODO: Map Spine entries to TOC entries while parsing
         let title = if let Some(toc) = &epub.toc {
             toc.nav_map
@@ -107,10 +110,12 @@ impl Chapter {
         } else {
             None
         };
+        info!("Chapter title: {:?}", title);
         let entry = epub.file_resolver.entry(chapter.file_idx)?;
+        info!("Chapter file entry: {}", entry.name);
         let reader = ZipEntryReader::new(file, entry).ok()?;
         // TODO: Ensure this is XHTML here or while parsing?
-        let mut parser = xml::XmlParser::new(reader, entry.size as _, 8096).ok()?;
+        let mut parser = Reader::new(reader, entry.size as _, 8096).ok()?;
 
         let mut paragraphs = alloc::vec![];
 
@@ -118,13 +123,13 @@ impl Chapter {
         // TODO: style sheet parsing
         loop {
             let event = parser.next_event().ok()?;
-            info!("XML event: {:?}", event);
+            trace!("XML event: {:?}", event);
             match event {
-                XmlEvent::Text { content } => {
+                Event::Text { content } => {
                     let text = content.to_owned();
                     paragraphs.push(Paragraph { text });
                 }
-                XmlEvent::EndOfFile => break,
+                Event::EndOfFile => break,
                 _ => {}
             }
         }

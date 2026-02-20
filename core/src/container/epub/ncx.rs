@@ -1,5 +1,5 @@
 use super::error::EpubError;
-use crate::container::xml::{self, XmlEvent, XmlParser};
+use embedded_xml as xml;
 
 use alloc::{borrow::ToOwned, string::String, vec::Vec};
 use embedded_io::Read;
@@ -15,18 +15,18 @@ pub fn parse(
     file_resolver: &super::FileResolver,
 ) -> super::Result<TableOfContents> {
     info!("Parsing NCX file");
-    let mut parser = xml::XmlParser::new(reader, size, 1024)?;
+    let mut parser = xml::Reader::new(reader, size, 1024)?;
 
     loop {
         let event = parser.next_event()?;
         trace!("Event: {event:?}");
 
         match event {
-            xml::XmlEvent::StartElement { name: "navMap", .. } => {
+            xml::Event::StartElement { name: "navMap", .. } => {
                 let nav_map = parse_nav_map(&mut parser, file_resolver)?;
                 return Ok(TableOfContents { nav_map });
             }
-            xml::XmlEvent::EndOfFile => break,
+            xml::Event::EndOfFile => break,
             _ => {}
         }
     }
@@ -46,7 +46,7 @@ pub struct NavMap {
 }
 
 fn parse_nav_map<R: Read>(
-    parser: &mut XmlParser<R>,
+    parser: &mut xml::OwnedReader<R>,
     file_resolver: &super::FileResolver,
 ) -> super::Result<NavMap> {
     let mut nav_points = Vec::new();
@@ -76,7 +76,7 @@ fn parse_nav_map<R: Read>(
         let event = parser.next_event()?;
 
         match event {
-            XmlEvent::StartElement { name: "navPoint", .. } => {
+            xml::Event::StartElement { name: "navPoint", .. } => {
                 flush(
                     &mut nav_points,
                     &mut label,
@@ -86,7 +86,7 @@ fn parse_nav_map<R: Read>(
                 );
                 depth += 1;
             }
-            XmlEvent::StartElement { name: "content", attrs } => {
+            xml::Event::StartElement { name: "content", attrs } => {
                 let src = attrs.get("src").ok_or(EpubError::InvalidData)?;
                 let mut parts = src.splitn(2, '#');
                 let file_path = parts.next().ok_or(EpubError::InvalidData)?;
@@ -94,22 +94,22 @@ fn parse_nav_map<R: Read>(
                 let anchor_part = parts.next();
                 anchor = anchor_part.map(|s| s.to_owned());
             }
-            XmlEvent::StartElement { name: "navLabel", .. } => {
-                let XmlEvent::StartElement { name: "text", .. } = parser.next_event()? else {
+            xml::Event::StartElement { name: "navLabel", .. } => {
+                let xml::Event::StartElement { name: "text", .. } = parser.next_event()? else {
                     return Err(EpubError::InvalidData);
                 };
-                let XmlEvent::Text { content } = parser.next_event()? else {
+                let xml::Event::Text { content } = parser.next_event()? else {
                     return Err(EpubError::InvalidData);
                 };
                 label = Some(content.to_owned());
-                let XmlEvent::EndElement { name: "text" } = parser.next_event()? else {
+                let xml::Event::EndElement { name: "text" } = parser.next_event()? else {
                     return Err(EpubError::InvalidData);
                 };
-                let XmlEvent::EndElement { name: "navLabel" } = parser.next_event()? else {
+                let xml::Event::EndElement { name: "navLabel" } = parser.next_event()? else {
                     return Err(EpubError::InvalidData);
                 };
             }
-            XmlEvent::EndElement { name: "navPoint" } => {
+            xml::Event::EndElement { name: "navPoint" } => {
                 flush(
                     &mut nav_points,
                     &mut label,
@@ -119,8 +119,8 @@ fn parse_nav_map<R: Read>(
                 );
                 depth -= 1;
             }
-            XmlEvent::EndElement { name: "navMap" } => break,
-            XmlEvent::EndOfFile => break,
+            xml::Event::EndElement { name: "navMap" } => break,
+            xml::Event::EndOfFile => break,
             _ => {}
         }
     }

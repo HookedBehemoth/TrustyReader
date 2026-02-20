@@ -1,7 +1,8 @@
 use std::{collections::HashMap, env::args, path::PathBuf};
 
 use log::{error, info, trace};
-use trusty_core::{container::xml, fs::Filesystem, zip};
+use trusty_core::{fs::Filesystem, zip};
+use embedded_xml as xml;
 
 use crate::std_fs::StdFilesystem;
 
@@ -28,7 +29,7 @@ fn test_file(path: &str) {
         }
         info!("Found XML file: {}", entry.name);
         let mut zip_entry = zip::ZipEntryReader::new(&mut file, &entry).unwrap();
-        let mut parser = xml::XmlParser::new(&mut zip_entry, entry.size as _, 4096).unwrap();
+        let mut parser = xml::Reader::new(&mut zip_entry, entry.size as _, 4096).unwrap();
         let mut counts = HashMap::new();
         let mut stack = Vec::new();
         let mut text_size = 0;
@@ -43,16 +44,16 @@ fn test_file(path: &str) {
             trace!("Event: {event:?}");
 
             match event {
-                xml::XmlEvent::StartElement { name, .. } => {
+                xml::Event::StartElement { name, .. } => {
                     *counts.entry(name.to_owned()).or_insert(0) += 1;
                     stack.push(name.to_owned());
                 }
-                xml::XmlEvent::EndElement { name } => {
+                xml::Event::EndElement { name } => {
                     let prev = stack.pop().unwrap();
                     assert_eq!(name, prev);
                 }
-                xml::XmlEvent::Text { content } => text_size += content.len(),
-                xml::XmlEvent::EndOfFile => break,
+                xml::Event::Text { content } => text_size += content.len(),
+                xml::Event::EndOfFile => break,
                 _ => {}
             }
         }

@@ -1,0 +1,67 @@
+<?xml version='1.0' encoding='UTF-8'?>
+
+<package xmlns:opf="http://www.idpf.org/2007/opf" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="id" xml:lang="en">
+  <metadata>
+    <dc:rights>Public domain in the USA.</dc:rights>
+    <dc:identifier id="id">http://www.gutenberg.org/1524</dc:identifier>
+    <dc:creator id="author_0">William Shakespeare</dc:creator>
+    <meta property="file-as" refines="#author_0">Shakespeare, William</meta>
+    <meta property="role" refines="#author_0" scheme="marc:relators">aut</meta>
+    <dc:title>Hamlet</dc:title>
+    <dc:language>en</dc:language>
+    <dc:subject>Tragedies (Drama)</dc:subject>
+    <dc:subject>Hamlet (Legendary character) -- Drama</dc:subject>
+    <dc:subject>Kings and rulers -- Succession -- Drama</dc:subject>
+    <dc:subject>Murder victims' families -- Drama</dc:subject>
+    <dc:subject>Fathers -- Death -- Drama</dc:subject>
+    <dc:subject>Revenge -- Drama</dc:subject>
+    <dc:subject>Princes -- Drama</dc:subject>
+    <dc:subject>Denmark -- Drama</dc:subject>
+    <dc:date>1998-11-01</dc:date>
+    <meta property="dcterms:modified">2026-02-01T15:21:45Z</meta>
+    <dc:source>https://www.gutenberg.org/files/1524/1524-h/1524-h.htm</dc:source>
+    <meta property="schema:accessMode">textual</meta>
+    <meta property="schema:accessibilityFeature">readingOrder</meta>
+    <meta property="schema:accessibilityHazard">none</meta>
+    <meta property="schema:accessModeSufficient">textual,visual</meta>
+    <meta property="schema:accessibilitySummary">This publication may not have complete alternative text descriptions.</meta>
+    <meta name="cover" content="id-4333161626272116681"/>
+  </metadata>
+  <manifest>
+    <!--Image: 1498 x 2250 size=255836 q=40-->
+    <item href="3525397106911661773_cover.jpg" id="id-4333161626272116681" media-type="image/jpeg" properties="cover-image"/>
+    <item href="pgepub.css" id="item1" media-type="text/css"/>
+    <item href="0.css" id="item2" media-type="text/css"/>
+    <item href="1.css" id="item3" media-type="text/css"/>
+    <!--Chunk: size=1579 Split on div.chapter-->
+    <item href="3939448558786652869_1524-h-0.htm.xhtml" id="pg-header" media-type="application/xhtml+xml"/>
+    <!--Chunk: size=4631 Split on div.chapter-->
+    <item href="3939448558786652869_1524-h-1.htm.xhtml" id="item4" media-type="application/xhtml+xml"/>
+    <!--Chunk: size=53610 Split on div.chapter-->
+    <item href="3939448558786652869_1524-h-2.htm.xhtml" id="item5" media-type="application/xhtml+xml"/>
+    <!--Chunk: size=43942 Split on div.chapter-->
+    <item href="3939448558786652869_1524-h-3.htm.xhtml" id="item6" media-type="application/xhtml+xml"/>
+    <!--Chunk: size=56356 Split on div.chapter-->
+    <item href="3939448558786652869_1524-h-4.htm.xhtml" id="item7" media-type="application/xhtml+xml"/>
+    <!--Chunk: size=42255 Split on div.chapter-->
+    <item href="3939448558786652869_1524-h-5.htm.xhtml" id="item8" media-type="application/xhtml+xml"/>
+    <!--Chunk: size=45557 Split on section-->
+    <item href="3939448558786652869_1524-h-6.htm.xhtml" id="item9" media-type="application/xhtml+xml"/>
+    <!--Chunk: size=19673-->
+    <item href="3939448558786652869_1524-h-7.htm.xhtml" id="pg-footer" media-type="application/xhtml+xml"/>
+    <item href="toc.xhtml" id="ncx" media-type="application/xhtml+xml" properties="nav"/>
+    <item href="toc.ncx" id="ncx2" media-type="application/x-dtbncx+xml"/>
+    <item href="wrap0000.xhtml" id="coverpage-wrapper" media-type="application/xhtml+xml" properties="svg"/>
+  </manifest>
+  <spine toc="ncx2">
+    <itemref idref="coverpage-wrapper"/>
+    <itemref idref="pg-header"/>
+    <itemref idref="item4"/>
+    <itemref idref="item5"/>
+    <itemref idref="item6"/>
+    <itemref idref="item7"/>
+    <itemref idref="item8"/>
+    <itemref idref="item9"/>
+    <itemref idref="pg-footer"/>
+  </spine>
+</package>

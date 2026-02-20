@@ -1,0 +1,16 @@
+[package]
+name = "embedded-xml"
+edition.workspace = true
+rust-version.workspace = true
+version = "1.0.0"
+
+[dependencies]
+embedded-io.workspace = true
+log = { workspace = true, optional = true }
+memchr = { version = "2.8.0", default-features = false }
+
+[features]
+log = ["dep:log"]
+alloc = []
+
+default = ["alloc"]

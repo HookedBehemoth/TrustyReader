@@ -649,6 +649,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "embedded-xml"
+version = "1.0.0"
+dependencies = [
+ "embedded-io 0.6.1",
+ "log",
+ "memchr",
+]
+
+[[package]]
 name = "enumset"
 version = "1.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2068,10 +2077,10 @@ version = "0.1.0"
 dependencies = [
  "embedded-graphics",
  "embedded-io 0.6.1",
+ "embedded-xml",
  "heapless 0.9.2",
  "hypher",
  "log",
- "memchr",
  "miniz_oxide 0.9.0",
  "rotate-enum",
  "strum",
@@ -2085,6 +2094,7 @@ dependencies = [
  "argh",
  "embedded-graphics",
  "embedded-io 0.6.1",
+ "embedded-xml",
  "env_logger",
  "fontdue",
  "image",

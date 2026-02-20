@@ -2,7 +2,7 @@ use alloc::borrow::ToOwned;
 use alloc::string::String;
 use log::{info, trace};
 
-use crate::container::xml::{XmlEvent, XmlParser};
+use embedded_xml as xml;
 use crate::fs::File;
 use crate::zip::{ZipEntryReader, ZipFileEntry};
 
@@ -20,19 +20,19 @@ pub(super) fn parse(file: &mut impl File, entries: &[ZipFileEntry]) -> Result<St
     info!("Parsing EPUB container");
 
     let reader = ZipEntryReader::new(file, entry)?;
-    let mut parser = XmlParser::new(reader, entry.size as _, 512)?;
+    let mut parser = xml::Reader::new(reader, entry.size as _, 512)?;
     loop {
         let event = parser.next_event()?;
         trace!("Event: {event:?}");
 
         match event {
-            XmlEvent::StartElement { name: "rootfile", attrs } => {
+            xml::Event::StartElement { name: "rootfile", attrs } => {
                 return attrs
                     .get("full-path")
                     .map(|s| s.to_owned())
                     .ok_or(EpubError::InvalidData);
             }
-            XmlEvent::EndOfFile => break,
+            xml::Event::EndOfFile => break,
             _ => {}
         }
     }

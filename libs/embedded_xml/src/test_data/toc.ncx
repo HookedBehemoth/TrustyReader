@@ -1,0 +1,196 @@
+<?xml version='1.0' encoding='UTF-8'?>
+
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1" xml:lang="en">
+  <head>
+    <meta name="dtb:uid" content="http://www.gutenberg.org/1524"/>
+    <meta name="dtb:depth" content="2"/>
+    <meta name="dtb:generator" content="Ebookmaker 0.13.8 by Project Gutenberg"/>
+    <meta name="dtb:totalPageCount" content="0"/>
+    <meta name="dtb:maxPageNumber" content="0"/>
+  </head>
+  <docTitle>
+    <text>Hamlet</text>
+  </docTitle>
+  <navMap>
+    <navPoint id="np-1" playOrder="1">
+      <navLabel>
+        <text>THE TRAGEDY OF HAMLET, PRINCE OF DENMARK</text>
+      </navLabel>
+      <content src="3939448558786652869_1524-h-0.htm.xhtml#pgepubid00000"/>
+    </navPoint>
+    <navPoint id="np-2" playOrder="2">
+      <navLabel>
+        <text>Contents</text>
+      </navLabel>
+      <content src="3939448558786652869_1524-h-1.htm.xhtml#pgepubid00001"/>
+      <navPoint id="np-3" playOrder="3">
+        <navLabel>
+          <text>Dramatis Personæ</text>
+        </navLabel>
+        <content src="3939448558786652869_1524-h-1.htm.xhtml#pgepubid00002"/>
+      </navPoint>
+      <navPoint id="np-4" playOrder="4">
+        <navLabel>
+          <text>SCENE. Elsinore.</text>
+        </navLabel>
+        <content src="3939448558786652869_1524-h-1.htm.xhtml#pgepubid00003"/>
+      </navPoint>
+    </navPoint>
+    <navPoint id="np-5" playOrder="5">
+      <navLabel>
+        <text>ACT I</text>
+      </navLabel>
+      <content src="3939448558786652869_1524-h-2.htm.xhtml#pgepubid00004"/>
+      <navPoint id="np-6" playOrder="6">
+        <navLabel>
+          <text>SCENE I. Elsinore. A platform before the Castle.</text>
+        </navLabel>
+        <content src="3939448558786652869_1524-h-2.htm.xhtml#pgepubid00005"/>
+      </navPoint>
+      <navPoint id="np-7" playOrder="7">
+        <navLabel>
+          <text>SCENE II. Elsinore. A room of state in the Castle.</text>
+        </navLabel>
+        <content src="3939448558786652869_1524-h-2.htm.xhtml#pgepubid00006"/>
+      </navPoint>
+      <navPoint id="np-8" playOrder="8">
+        <navLabel>
+          <text>SCENE III. A room in Polonius’s house.</text>
+        </navLabel>
+        <content src="3939448558786652869_1524-h-2.htm.xhtml#pgepubid00007"/>
+      </navPoint>
+      <navPoint id="np-9" playOrder="9">
+        <navLabel>
+          <text>SCENE IV. The platform.</text>
+        </navLabel>
+        <content src="3939448558786652869_1524-h-2.htm.xhtml#pgepubid00008"/>
+      </navPoint>
+      <navPoint id="np-10" playOrder="10">
+        <navLabel>
+          <text>SCENE V. A more remote part of the Castle.</text>
+        </navLabel>
+        <content src="3939448558786652869_1524-h-2.htm.xhtml#pgepubid00009"/>
+      </navPoint>
+    </navPoint>
+    <navPoint id="np-11" playOrder="11">
+      <navLabel>
+        <text>ACT II</text>
+      </navLabel>
+      <content src="3939448558786652869_1524-h-3.htm.xhtml#pgepubid00010"/>
+      <navPoint id="np-12" playOrder="12">
+        <navLabel>
+          <text>SCENE I. A room in Polonius’s house.</text>
+        </navLabel>
+        <content src="3939448558786652869_1524-h-3.htm.xhtml#pgepubid00011"/>
+      </navPoint>
+      <navPoint id="np-13" playOrder="13">
+        <navLabel>
+          <text>SCENE II. A room in the Castle.</text>
+        </navLabel>
+        <content src="3939448558786652869_1524-h-3.htm.xhtml#pgepubid00012"/>
+      </navPoint>
+    </navPoint>
+    <navPoint id="np-14" playOrder="14">
+      <navLabel>
+        <text>ACT III</text>
+      </navLabel>
+      <content src="3939448558786652869_1524-h-4.htm.xhtml#pgepubid00013"/>
+      <navPoint id="np-15" playOrder="15">
+        <navLabel>
+          <text>SCENE I. A room in the Castle.</text>
+        </navLabel>
+        <content src="3939448558786652869_1524-h-4.htm.xhtml#pgepubid00014"/>
+      </navPoint>
+      <navPoint id="np-16" playOrder="16">
+        <navLabel>
+          <text>SCENE II. A hall in the Castle.</text>
+        </navLabel>
+        <content src="3939448558786652869_1524-h-4.htm.xhtml#pgepubid00015"/>
+      </navPoint>
+      <navPoint id="np-17" playOrder="17">
+        <navLabel>
+          <text>SCENE III. A room in the Castle.</text>
+        </navLabel>
+        <content src="3939448558786652869_1524-h-4.htm.xhtml#pgepubid00016"/>
+      </navPoint>
+      <navPoint id="np-18" playOrder="18">
+        <navLabel>
+          <text>SCENE IV. Another room in the Castle.</text>
+        </navLabel>
+        <content src="3939448558786652869_1524-h-4.htm.xhtml#pgepubid00017"/>
+      </navPoint>
+    </navPoint>
+    <navPoint id="np-19" playOrder="19">
+      <navLabel>
+        <text>ACT IV</text>
+      </navLabel>
+      <content src="3939448558786652869_1524-h-5.htm.xhtml#pgepubid00018"/>
+      <navPoint id="np-20" playOrder="20">
+        <navLabel>
+          <text>SCENE I. A room in the Castle.</text>
+        </navLabel>
+        <content src="3939448558786652869_1524-h-5.htm.xhtml#pgepubid00019"/>
+      </navPoint>
+      <navPoint id="np-21" playOrder="21">
+        <navLabel>
+          <text>SCENE II. Another room in the Castle.</text>
+        </navLabel>
+        <content src="3939448558786652869_1524-h-5.htm.xhtml#pgepubid00020"/>
+      </navPoint>
+      <navPoint id="np-22" playOrder="22">
+        <navLabel>
+          <text>SCENE III. Another room in the Castle.</text>
+        </navLabel>
+        <content src="3939448558786652869_1524-h-5.htm.xhtml#pgepubid00021"/>
+      </navPoint>
+      <navPoint id="np-23" playOrder="23">
+        <navLabel>
+          <text>SCENE IV. A plain in Denmark.</text>
+        </navLabel>
+        <content src="3939448558786652869_1524-h-5.htm.xhtml#pgepubid00022"/>
+      </navPoint>
+      <navPoint id="np-24" playOrder="24">
+        <navLabel>
+          <text>SCENE V. Elsinore. A room in the Castle.</text>
+        </navLabel>
+        <content src="3939448558786652869_1524-h-5.htm.xhtml#pgepubid00023"/>
+      </navPoint>
+      <navPoint id="np-25" playOrder="25">
+        <navLabel>
+          <text>SCENE VI. Another room in the Castle.</text>
+        </navLabel>
+        <content src="3939448558786652869_1524-h-5.htm.xhtml#pgepubid00024"/>
+      </navPoint>
+      <navPoint id="np-26" playOrder="26">
+        <navLabel>
+          <text>SCENE VII. Another room in the Castle.</text>
+        </navLabel>
+        <content src="3939448558786652869_1524-h-5.htm.xhtml#pgepubid00025"/>
+      </navPoint>
+    </navPoint>
+    <navPoint id="np-27" playOrder="27">
+      <navLabel>
+        <text>ACT V</text>
+      </navLabel>
+      <content src="3939448558786652869_1524-h-6.htm.xhtml#pgepubid00026"/>
+      <navPoint id="np-28" playOrder="28">
+        <navLabel>
+          <text>SCENE I. A churchyard.</text>
+        </navLabel>
+        <content src="3939448558786652869_1524-h-6.htm.xhtml#pgepubid00027"/>
+      </navPoint>
+      <navPoint id="np-29" playOrder="29">
+        <navLabel>
+          <text>SCENE II. A hall in the Castle.</text>
+        </navLabel>
+        <content src="3939448558786652869_1524-h-6.htm.xhtml#pgepubid00028"/>
+      </navPoint>
+    </navPoint>
+    <navPoint id="np-30" playOrder="30">
+      <navLabel>
+        <text>THE FULL PROJECT GUTENBERG LICENSE</text>
+      </navLabel>
+      <content src="3939448558786652869_1524-h-7.htm.xhtml#pg-footer-heading"/>
+    </navPoint>
+  </navMap>
+</ncx>
