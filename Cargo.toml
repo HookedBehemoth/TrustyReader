@@ -6,6 +6,8 @@ members = ["core", "desktop", "libs/embedded_xml", "x4"]
 edition      = "2024"
 rust-version = "1.88"
 version      = "0.1.0"
+license-file = "LICENSE.txt"
+repository = "https://codeberg.org/behemoth/TrustyReader"
 
 [workspace.dependencies]
 log                    = "0.4.27"

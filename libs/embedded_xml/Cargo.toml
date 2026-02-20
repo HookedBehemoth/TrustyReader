@@ -3,6 +3,11 @@ name = "embedded-xml"
 edition.workspace = true
 rust-version.workspace = true
 version = "1.0.0"
+keywords = ["xml", "embedded-io"]
+description = "A no_std XML reader using embedded-io for memory constrainted environment."
+readme = "README.md"
+repository.workspace = true
+license-file.workspace = true
 
 [dependencies]
 embedded-io.workspace = true
