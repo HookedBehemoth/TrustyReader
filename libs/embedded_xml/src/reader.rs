@@ -146,7 +146,7 @@ impl<R: embedded_io::Read, Buffer: AsRef<[u8]> + AsMut<[u8]>> Reader<R, Buffer> 
 
         let curr = self.buffer()[..curr_end].trim_ascii();
         if !curr.is_empty() {
-            let block = self.buffer.as_ref()[self.pos..self.pos + curr_end].trim_ascii();
+            let block = &self.buffer.as_ref()[self.pos..self.pos + curr_end];
             let content = core::str::from_utf8(block)?;
             self.pos += curr_end;
             return Ok(Event::Text { content });
@@ -322,6 +322,16 @@ impl<R: embedded_io::Read, Buffer: AsRef<[u8]> + AsMut<[u8]>> Reader<R, Buffer> 
         &self.buffer.as_ref()[self.pos..self.end]
     }
 }
+
+// impl<R: embedded_io::Read, Buffer: AsRef<[u8]> + AsMut<[u8]>> core::fmt::Debug for Reader<R, Buffer> {
+//     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+//         f.debug_struct("Reader")
+//             .field("pos", &self.pos)
+//             .field("end", &self.end)
+//             .field("remaining", &self.remaining)
+//             .finish()
+//     }
+// }
 
 fn find_span(buffer: &[u8], start: &[u8], end: &[u8]) -> Option<(usize, Option<usize>)> {
     let start = memchr::memmem::find(buffer, start)? + start.len();

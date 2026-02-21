@@ -1,12 +1,13 @@
 use alloc::{borrow::ToOwned, boxed::Box, string::String, vec::Vec};
 use log::info;
 
-use crate::{fs::File, zip};
+use crate::{fs::File, zip::{self, ZipEntryReader}};
 
 pub mod container;
 pub mod error;
 pub mod ncx;
 pub mod opf;
+pub mod spine;
 
 type Result<T> = core::result::Result<T, error::EpubError>;
 
@@ -62,4 +63,26 @@ pub fn parse(file: &mut impl File) -> Result<Epub> {
     let epub = opf::parse(file, file_resolver, &rootfile)?;
 
     Ok(epub)
+}
+
+pub fn parse_chapter(epub: &Epub, index: usize, file: &mut impl File) -> Result<super::book::Chapter> {
+    info!("Loading chapter {} from EPUB", index);
+    let chapter = epub.spine.get(index).ok_or(error::EpubError::InvalidData)?;
+    info!("Chapter file index: {}", chapter.file_idx);
+    // TODO: Map Spine entries to TOC entries while parsing
+    let title = if let Some(toc) = &epub.toc {
+        toc.nav_map
+            .nav_points
+            .iter()
+            .find(|entry| entry.file_idx == chapter.file_idx)
+            .map(|entry| entry.label.clone())
+    } else {
+        None
+    };
+    info!("Chapter title: {:?}", title);
+    let entry = epub.file_resolver.entry(chapter.file_idx).unwrap();
+    info!("Chapter file entry: {}", entry.name);
+    let reader = ZipEntryReader::new(file, entry)?;
+
+    spine::parse(title, reader, entry.size as usize).map_err(Into::into)
 }

@@ -34,6 +34,11 @@ impl ActivityType {
             path: heapless::String::new(),
         }
     }
+    pub fn reader(path: &str) -> Self {
+        ActivityType::Reader {
+            path: path.try_into().unwrap(),
+        }
+    }
 }
 
 pub enum UpdateResult {

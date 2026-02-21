@@ -215,6 +215,11 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
         }
         self.chapter_idx -= 1;
         let Some(chapter) = book.chapter(self.chapter_idx, &mut self.file) else { return; };
+        if chapter.paragraphs.is_empty() {
+            self.chapter = Some(chapter);
+            self.progress.start = Progress { paragraph: 0, line: 0 };
+            return;
+        }
         let last_para = chapter.paragraphs.len() - 1;
         let lines = layout::layout_text(options, &chapter.paragraphs[last_para].text);
         // Try to show the last 10 lines

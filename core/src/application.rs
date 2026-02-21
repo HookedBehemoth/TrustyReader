@@ -8,7 +8,7 @@ use crate::activities::filebrowser::FileBrowser;
 use crate::activities::home::HomeActivity;
 use crate::activities::reader::ReaderActivity;
 use crate::activities::settings::SettingsActivity;
-use crate::activities::{ActivityType, home};
+use crate::activities::ActivityType;
 
 use crate::display::RefreshMode;
 use crate::res::img::bebop;
@@ -37,8 +37,11 @@ where
     Filesystem: crate::fs::Filesystem + Clone + 'static,
 {
     pub fn new(display_buffers: &'a mut DisplayBuffers, filesystem: Filesystem) -> Self {
-        let activity_type = ActivityType::home();
-        let activity = Box::new(HomeActivity::new(home::Focus::FileBrowser));
+        Self::with_intent(display_buffers, filesystem, ActivityType::home())
+    }
+
+    pub fn with_intent(display_buffers: &'a mut DisplayBuffers, filesystem: Filesystem, activity_type: ActivityType) -> Self {
+        let activity = Self::create_activity(&activity_type, &filesystem);
 
         Application {
             dirty: true,
@@ -115,24 +118,24 @@ where
     }
 
     fn open(&mut self, activity_type: ActivityType) {
-        self.activity = self.create_activity(&activity_type);
+        self.activity = Self::create_activity(&activity_type, &self.filesystem);
         self.activity.start();
         self.dirty = true;
         self.activity_type = activity_type;
     }
 
-    fn create_activity(&self, activity_type: &ActivityType) -> Box<dyn Activity> {
+    fn create_activity(activity_type: &ActivityType, filesystem: &Filesystem) -> Box<dyn Activity> {
         match activity_type {
             ActivityType::Home { state } => Box::new(HomeActivity::new(*state)),
             ActivityType::FileBrowser { focus, path } => {
-                let dir = self.filesystem.open_directory(path).unwrap();
+                let dir = filesystem.open_directory(path).unwrap();
                 let entries = dir.list().unwrap();
                 Box::new(FileBrowser::new(path.clone(), entries, *focus))
             }
             ActivityType::Settings => Box::new(SettingsActivity::new()),
             ActivityType::Demo => Box::new(DemoActivity::new()),
             ActivityType::Reader { path } => Box::new(ReaderActivity::new(
-                self.filesystem.clone(),
+                filesystem.clone(),
                 path.to_string(),
             )),
         }

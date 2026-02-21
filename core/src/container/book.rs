@@ -1,18 +1,19 @@
 use alloc::{
-    borrow::ToOwned, string::{String, ToString}, vec::Vec
+    string::{String, ToString},
+    vec::Vec,
 };
-use log::{info, trace};
+use core::fmt::Write;
+use log::info;
 
-use crate::{
-    container::epub,
-    fs::File,
-    zip::ZipEntryReader,
-};
-use embedded_xml::{Event, Reader};
+use crate::{container::epub, fs::File};
+use embedded_xml as xml;
 
 enum BookFormat {
     PlainText(String, String),
     Markdown(String, String),
+    Xml(String, String),
+    Html(String, String),
+    Xhtml(String, String),
     Epub(epub::Epub),
 }
 
@@ -46,12 +47,26 @@ impl Book {
                 let epub = epub::parse(file).ok()?;
                 BookFormat::Epub(epub)
             }
+            "xml" => {
+                let contents = file.read_to_end().ok()?;
+                let text = String::from_utf8(contents).ok()?;
+                BookFormat::Xml(name.to_string(), text)
+            }
+            "html" => {
+                let contents = file.read_to_end().ok()?;
+                let text = String::from_utf8(contents).ok()?;
+                BookFormat::Html(name.to_string(), text)
+            }
+            "xhtml" => {
+                let contents = file.read_to_end().ok()?;
+                let text = String::from_utf8(contents).ok()?;
+                BookFormat::Xhtml(name.to_string(), text)
+            }
             _ => {
                 let contents = file.read_to_end().ok()?;
                 let text = String::from_utf8(contents).ok()?;
                 BookFormat::PlainText(name.to_string(), text)
-            }
-            // _ => return None,
+            } // _ => return None,
         };
 
         Some(Book { format })
@@ -61,6 +76,9 @@ impl Book {
         match &self.format {
             BookFormat::PlainText(title, _) => title,
             BookFormat::Markdown(title, _) => title,
+            BookFormat::Xhtml(title, _) => title,
+            BookFormat::Html(title, _) => title,
+            BookFormat::Xml(title, _) => title,
             BookFormat::Epub(epub) => &epub.metadata.title,
         }
     }
@@ -73,10 +91,14 @@ impl Book {
     }
 
     pub fn chapter(&self, index: usize, file: &mut impl File) -> Option<Chapter> {
+        let size = file.size();
         match &self.format {
             BookFormat::PlainText(_, text) => Some(Chapter::from_plaintext(text)),
             BookFormat::Markdown(_, text) => Some(Chapter::from_plaintext(text)),
-            BookFormat::Epub(epub) => Chapter::from_epub(epub, index, file),
+            BookFormat::Html(_, text) => Chapter::from_html(text),
+            BookFormat::Xml(_, text) => Chapter::from_xml(text),
+            BookFormat::Xhtml(_, text) => epub::spine::parse(None, text.as_bytes(), size).ok(),
+            BookFormat::Epub(epub) => epub::parse_chapter(epub, index, file).ok(),
         }
     }
 
@@ -92,48 +114,43 @@ impl Chapter {
     fn from_plaintext(text: &str) -> Self {
         let paragraphs = text
             .split("\n\n")
-            .map(|p| Paragraph { text: p.to_string() })
+            .map(|p| Paragraph {
+                text: p.to_string(),
+            })
             .collect();
         Chapter { title: None, paragraphs }
     }
-    fn from_epub(epub: &epub::Epub, index: usize, file: &mut impl File) -> Option<Self> {
-        info!("Loading chapter {} from EPUB", index);
-        let chapter = epub.spine.get(index)?;
-        info!("Chapter file index: {}", chapter.file_idx);
-        // TODO: Map Spine entries to TOC entries while parsing
-        let title = if let Some(toc) = &epub.toc {
-            toc.nav_map
-                .nav_points
-                .iter()
-                .find(|entry| entry.file_idx == chapter.file_idx)
-                .map(|entry| entry.label.clone())
-        } else {
-            None
-        };
-        info!("Chapter title: {:?}", title);
-        let entry = epub.file_resolver.entry(chapter.file_idx)?;
-        info!("Chapter file entry: {}", entry.name);
-        let reader = ZipEntryReader::new(file, entry).ok()?;
-        // TODO: Ensure this is XHTML here or while parsing?
-        let mut parser = Reader::new(reader, entry.size as _, 8096).ok()?;
+    
+    fn from_xml(text: &str) -> Option<Self> {
+        let mut reader = xml::Reader::new(text.as_bytes(), text.len() as _, 8096).ok()?;
 
-        let mut paragraphs = alloc::vec![];
+        let mut depth = 0;
 
-        // TODO: semantic parsing
-        // TODO: style sheet parsing
+        let mut paragraphs = Vec::new();
         loop {
-            let event = parser.next_event().ok()?;
-            trace!("XML event: {:?}", event);
+            let event = reader.next_event().ok()?;
             match event {
-                Event::Text { content } => {
-                    let text = content.to_owned();
-                    paragraphs.push(Paragraph { text });
-                }
-                Event::EndOfFile => break,
+                xml::Event::StartElement { .. } => depth += 1,
+                xml::Event::EndElement { .. } => depth -= 1,
+                xml::Event::EndOfFile => break,
                 _ => {}
             }
+            let mut text = String::new();
+            for _ in 0..depth {
+                text.push_str("-");
+            }
+            write!(text, "{event:?}\n\n").unwrap();
+            paragraphs.push(Paragraph { text });
         }
 
-        Some(Chapter { title, paragraphs })
+        Some(Chapter { title: None, paragraphs })
+    }
+
+    fn from_html(text: &str) -> Option<Self> {
+        if text.contains("<?xml") {
+            epub::spine::parse(None, text.as_bytes(), text.len()).ok()
+        } else {
+            Some(Self::from_plaintext(text))
+        }
     }
 }

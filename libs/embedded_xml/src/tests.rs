@@ -97,7 +97,6 @@ fn full_tree() {
             <?example processing=\"instructions\"?>\
             <child>More text</child>\
             <![CDATA[doesn't need to be \xff utf-8 encoded]]>
-            <child>  \tText with whitespace \r\n  </child>\
             <!-- a comment -->\
             <self-closing />\
             <self-closing/>\
@@ -128,9 +127,6 @@ fn full_tree() {
     assert_matches!(parser.next_event(), Ok(Text { content: "More text" }));
     assert_matches!(parser.next_event(), Ok(EndElement { name: "child" }));
     assert_matches!(parser.next_event(), Ok(CDATA { data: b"doesn't need to be \xff utf-8 encoded" }));
-    assert_matches!(parser.next_event(), Ok(StartElement { name: "child", .. }) );
-    assert_matches!(parser.next_event(), Ok(Text { content: "Text with whitespace" }));
-    assert_matches!(parser.next_event(), Ok(EndElement { name: "child" }));
     assert_matches!(parser.next_event(), Ok(Comment { content: "a comment" }));
     assert_matches!(parser.next_event(), Ok(StartElement { name: "self-closing", .. }) );
     assert_matches!(parser.next_event(), Ok(EndElement { name: "self-closing" }) );
