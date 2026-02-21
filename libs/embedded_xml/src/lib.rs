@@ -30,6 +30,7 @@ loop {
 ```
 
 ## Limitations & non-goals
+- UTF-8 only
 - no rewinding
 - no DTD support
 - no XPath
