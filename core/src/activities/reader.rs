@@ -25,7 +25,7 @@ where
     settings_cursor: usize,
     font_size: font::FontSize,
     alignment: layout::Alignment,
-    justify: bool,
+    indent: u16,
     language: hypher::Lang,
     debug_width: bool,
     file: Filesystem::File,
@@ -73,8 +73,8 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
             show_settings: false,
             settings_cursor: 0,
             font_size: font::FontSize::Size26,
-            alignment: layout::Alignment::Start,
-            justify: true,
+            alignment: layout::Alignment::Justify,
+            indent: 10,
             language,
             debug_width: false,
             file,
@@ -96,7 +96,6 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
         display_buffers: &mut DisplayBuffers,
     ) {
         let size = display_buffers.size();
-        let font = font.definition(font::FontStyle::Regular);
 
         for (line, y_offset) in lines.iter().zip(y_offsets) {
             let y = y_base + y_offset;
@@ -105,6 +104,7 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
             }
             let mut x_advance = 0u16;
             for word in line.words.iter() {
+                let font = font.definition(word.style);
                 x_advance = x_start + word.x;
                 for codepoint in word.text.chars() {
                     if let Ok(glyph_width) = font::draw_glyph(
@@ -121,6 +121,7 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
                 }
             }
             if line.hyphenated {
+                let font = font.definition(font::FontStyle::Regular);
                 if let Ok(glyph_width) = font::draw_glyph(
                     font,
                     '-' as _,
@@ -186,8 +187,8 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
         let font = font::Font::new(font::FontFamily::Bookerly, self.font_size);
         let options = layout::Options::new(
             (width - 2 * padding) as _,
-            self.alignment,
-            self.justify,
+            // self.alignment,
+            // self.justify,
             self.language,
             font,
         );
@@ -196,7 +197,7 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
             self.prev_chapter(options, page_height);
             return;
         };
-        if let Some(progress) = Self::compute_prev_page(
+        if let Some(progress) = self.compute_prev_page(
             chapter,
             self.progress.start,
             options,
@@ -221,11 +222,14 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
             return;
         }
         let last_para = chapter.paragraphs.len() - 1;
-        let lines = layout::layout_text(options, &chapter.paragraphs[last_para].text);
+        // let paragraph = &chapter.paragraphs[last_para];
+        // let indent = paragraph.indent.unwrap_or(self.indent);
+        // let lines = layout::layout_text(options, indent, &paragraph.runs);
+        let lines = self.layout_text(options, &chapter.paragraphs[last_para]);
         // Try to show the last 10 lines
         // NOTE: unless we lay out the entire chapter, there doesn't seem to be a sane way of getting
         // the correct line number. Fill the entire page :(
-        self.progress.start = Self::compute_prev_page(
+        self.progress.start = self.compute_prev_page(
             &chapter,
             Progress { paragraph: last_para as u16, line: lines.len() as u16 },
             options,
@@ -237,6 +241,7 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
     /// Compute the previous page start by laying out paragraphs backwards
     /// from the given position until the page is filled from the bottom.
     fn compute_prev_page(
+        &self,
         chapter: &book::Chapter,
         current: Progress,
         options: layout::Options,
@@ -279,7 +284,7 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
             }
             first_iter = false;
 
-            if paragraph.text.is_empty() {
+            if paragraph.runs.is_empty() {
                 result_para = para_idx;
                 result_line = 0;
                 if para_idx == 0 {
@@ -289,7 +294,9 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
                 continue;
             }
 
-            let para_lines = layout::layout_text(options, &paragraph.text);
+            // let indent = paragraph.indent.unwrap_or(self.indent);
+            // let para_lines = layout::layout_text(options, indent, &paragraph.runs);
+            let para_lines = self.layout_text(options, paragraph);
             // How many lines from this paragraph are available
             let available = if para_idx == cur_para && at_line != usize::MAX {
                 at_line
@@ -328,6 +335,12 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
             paragraph: result_para as u16,
             line: result_line as u16,
         })
+    }
+
+    fn layout_text<'a>(&self, options: layout::Options, paragraph: &'a book::Paragraph) -> Vec<layout::Line<'a>> {
+        let alignment = paragraph.alignment.unwrap_or(self.alignment);
+        let indent = paragraph.indent.unwrap_or(self.indent);
+        layout::layout_text(options, alignment, indent, &paragraph.runs)
     }
 
     fn display_settings(&self, buffers: &mut DisplayBuffers) {
@@ -380,12 +393,12 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
             .ok();
         
         // Justify
-        Text::new("Justify:", Point::new(desc_pos, size.height as i32 / 2 + 110), text_style)
-            .draw(buffers)
-            .ok();
-        Text::new(if self.justify { "On" } else { "Off" }, Point::new(value_pos, size.height as i32 / 2 + 110), text_style)
-            .draw(buffers)
-            .ok();
+        // Text::new("Justify:", Point::new(desc_pos, size.height as i32 / 2 + 110), text_style)
+        //     .draw(buffers)
+        //     .ok();
+        // Text::new(if self.justify { "On" } else { "Off" }, Point::new(value_pos, size.height as i32 / 2 + 110), text_style)
+        //     .draw(buffers)
+        //     .ok();
 
         // Rotation
         Text::new("Rotation:", Point::new(desc_pos, size.height as i32 / 2 + 140), text_style)
@@ -444,9 +457,10 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
                 1 => self.alignment = match self.alignment {
                     Start => Center,
                     Center => End,
-                    End => Start,
+                    End => Justify,
+                    Justify => Start,
                 },
-                2 => self.justify = !self.justify,
+                // 2 => self.justify = !self.justify,
                 3 => {
                     let new_rotation = match state.rotation {
                         Rotate0 => Rotate90,
@@ -520,8 +534,8 @@ impl<Filesystem: crate::fs::Filesystem> super::Activity for ReaderActivity<Files
         let font = font::Font::new(font::FontFamily::Bookerly, self.font_size);
         let options = layout::Options::new(
             (width - 2 * padding) as _,
-            self.alignment,
-            self.justify,
+            // self.alignment,
+            // self.justify,
             self.language,
             font,
         );
@@ -556,13 +570,15 @@ impl<Filesystem: crate::fs::Filesystem> super::Activity for ReaderActivity<Files
                 }
             }
 
-            if paragraph.text.is_empty() {
+            if paragraph.runs.is_empty() {
                 end_paragraph = para_idx + 1;
                 end_line = 0;
                 continue;
             }
 
-            let para_lines = layout::layout_text(options, &paragraph.text);
+            let alignment = paragraph.alignment.unwrap_or(self.alignment);
+            let indent = paragraph.indent.unwrap_or(self.indent);
+            let para_lines = layout::layout_text(options, alignment, indent, &paragraph.runs);
             let skip = if para_idx == start_paragraph { start_line } else { 0 };
 
             for (line_idx, line) in para_lines.into_iter().enumerate() {

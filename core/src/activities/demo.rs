@@ -8,6 +8,7 @@ use crate::{
         xt,
     },
 };
+use alloc::string::ToString;
 use embedded_graphics::{
     Drawable,
     mono_font::{MonoTextStyle, ascii::FONT_10X20},
@@ -285,18 +286,27 @@ impl DemoActivity {
         let x_start = 20u16;
         let options = crate::layout::Options::new(
             size.width as u16 - 40,
-            crate::layout::Alignment::Start,
-            true,
+            // crate::layout::Alignment::Start,
+            // true,
             hypher::Lang::English,
             font,
         );
+        let alignment = crate::layout::Alignment::Start;
+        let indent = 0u16;
 
         let text = "The Watergate scandal, or simply Watergate, was a political scandal in the United States involving the administration of President Richard Nixon. On June 17, 1972, operatives associated with Nixon's 1972 re-election campaign were caught burglarizing and planting listening devices in the Democratic National Committee headquarters at Washington, D.C.'s Watergate complex. Nixon's efforts to conceal his administration's involvement led to an impeachment process and his resignation in August 1974.\n\
         Emerging from the White House's efforts to stop leaks, the break-in was an implementation of Operation Gemstone, enacted by mostly Cuban burglars led by former intelligence agents E. Howard Hunt and G. Gordon Liddy. After the arrests, investigators and reporters like The Washington Post's Bob Woodward and Carl Bernstein—guided by the source \"Deep Throat\"—exposed a White House political espionage program illegally funded by donor contributions. Nixon denied involvement but his administration destroyed evidence, obstructed investigators, and bribed the burglars. This cover-up initially worked, helping Nixon win a landslide re-election, until revelations from the burglars' 1973 trial led to a Senate investigation.\n\
         Mounting pressure led Attorney General Elliot Richardson to appoint Archibald Cox as Watergate special prosecutor. Cox subpoenaed Nixon's Oval Office tapes—suspected to include Watergate conversations—but Nixon invoked executive privilege to block their release, triggering a constitutional crisis. In the \"Saturday Night Massacre\", Nixon fired Cox, forcing the resignations of the attorney general and his deputy and fueling suspicions of Nixon's involvement. Nixon released select tapes, although one was partially erased and two others disappeared. In April 1974, Cox's replacement Leon Jaworski reissued the subpoena, but Nixon provided only redacted transcripts. In July, the Supreme Court ordered the tapes' release, and the House Judiciary Committee recommended impeachment for obstructing justice, abuse of power, and contempt of Congress. The White House released the \"Smoking Gun\" tape, showing that Nixon ordered the CIA to stop the FBI's investigation. Facing impeachment, on August 9, 1974, Nixon became the first U.S. president to resign. In total, 69 people were charged for Watergate—including two cabinet members—and most pleaded guilty or were convicted. Nixon was pardoned by his successor, Gerald Ford.\n\
         Watergate, often considered the greatest presidential scandal, tarnished Nixon's legacy and had electoral ramifications for the Republican Party: heavy losses in the 1974 midterm elections and Ford's failed 1976 reelection bid. Despite significant coverage, no consensus exists on the motive for the break-in or who specifically ordered it. Theories range from an incompetent break-in by rogue campaign officials to a sexpionage operation or CIA plot. The scandal generated over 30 memoirs and left such an impression that it is common for scandals, even outside politics or the United States, to be named with the suffix \"-gate\".";
 
-        let lines = crate::layout::layout_text(options, text);
+        let run = layout::Run {
+            text: text.to_string(),
+            style,
+            breaking: false,
+            // alignment: None,
+        };
+        let runs = [run];
+        let lines = crate::layout::layout_text(options, alignment, indent, &runs);
 
         let font = font.definition(style);
         buffers.clear(BinaryColor::On).ok();
@@ -421,7 +431,7 @@ impl super::Activity for DemoActivity {
     }
 
     fn draw(&mut self, display: &mut dyn Display, buffers: &mut DisplayBuffers) {
-        use font::{FontSize::*, FontStyle::*, Font};
+        use font::{Font, FontSize::*, FontStyle::*};
         match self.screen {
             1 => self.draw_test_image(display, buffers),
             2 => self.draw_bebop(display, buffers),

@@ -5,7 +5,7 @@ use alloc::{
 use core::fmt::Write;
 use log::info;
 
-use crate::{container::epub, fs::File};
+use crate::{container::epub, fs::File, layout, res::font};
 use embedded_xml as xml;
 
 enum BookFormat {
@@ -30,7 +30,9 @@ pub struct Chapter {
 }
 
 pub struct Paragraph {
-    pub text: String,
+    pub runs: Vec<layout::Run>,
+    pub alignment: Option<layout::Alignment>,
+    pub indent: Option<u16>,
 }
 
 impl Book {
@@ -115,12 +117,18 @@ impl Chapter {
         let paragraphs = text
             .split("\n\n")
             .map(|p| Paragraph {
-                text: p.to_string(),
+                runs: alloc::vec![layout::Run {
+                    text: p.to_string(),
+                    style: font::FontStyle::Regular,
+                    breaking: false,
+                }],
+                alignment: None,
+                indent: None,
             })
             .collect();
         Chapter { title: None, paragraphs }
     }
-    
+
     fn from_xml(text: &str) -> Option<Self> {
         let mut reader = xml::Reader::new(text.as_bytes(), text.len() as _, 8096).ok()?;
 
@@ -140,7 +148,15 @@ impl Chapter {
                 text.push_str("-");
             }
             write!(text, "{event:?}\n\n").unwrap();
-            paragraphs.push(Paragraph { text });
+            paragraphs.push(Paragraph {
+                runs: alloc::vec![layout::Run {
+                    text,
+                    style: font::FontStyle::Regular,
+                    breaking: false,
+                }],
+                alignment: None,
+                indent: None,
+            });
         }
 
         Some(Chapter { title: None, paragraphs })

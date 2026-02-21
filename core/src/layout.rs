@@ -1,13 +1,10 @@
-use alloc::vec::Vec;
-use log::trace;
+use alloc::{string::String, vec::Vec};
 
 use crate::res::font;
 
 #[derive(Clone, Copy)]
 pub struct Options {
     pub width: u16,
-    pub alignment: Alignment,
-    pub justify: bool,
     pub language: hypher::Lang,
     pub font: font::Font,
     // split by type?
@@ -18,8 +15,6 @@ pub struct Options {
 impl Options {
     pub fn new(
         width: u16,
-        alignment: Alignment,
-        justify: bool,
         language: hypher::Lang,
         font: font::Font,
     ) -> Self {
@@ -28,8 +23,6 @@ impl Options {
         let dash_width = font_def.char_width('-').unwrap() as u16;
         Self {
             width,
-            alignment,
-            justify,
             language,
             font,
             space_width,
@@ -43,6 +36,7 @@ pub enum Alignment {
     Start,
     Center,
     End,
+    Justify,
 }
 impl Alignment {
     pub fn repr(self) -> &'static str {
@@ -50,43 +44,66 @@ impl Alignment {
             Alignment::Start => "Start",
             Alignment::Center => "Center",
             Alignment::End => "End",
+            Alignment::Justify => "Justify",
         }
     }
 }
 
-pub struct Word<'a> {
+pub struct Text<'a> {
     pub text: &'a str,
     pub x: u16,
+    pub style: font::FontStyle,
 }
 
 pub struct Line<'a> {
-    pub words: Vec<Word<'a>>,
+    pub words: Vec<Text<'a>>,
     pub hyphenated: bool,
 }
 
-pub fn layout_text<'a>(options: Options, text: &'a str) -> Vec<Line<'a>> {
-    let mut x = 0;
+pub struct Image<'a> {
+    pub handle: &'a str,
+    pub width: u16,
+    pub height: u16,
+}
+
+pub enum Block<'a> {
+    Text(Vec<Line<'a>>),
+    Image(Image<'a>),
+}
+
+/// Input for layouting.
+pub struct Run {
+    pub text: String,
+    pub style: font::FontStyle,
+    pub breaking: bool,
+}
+
+pub fn layout_text<'a>(
+    options: Options,
+    alignment: Alignment,
+    indent: u16,
+    runs: &'a [Run]
+) -> Vec<Line<'a>> {
+    let mut x = indent;
     let mut lines: Vec<Line> = Vec::new();
     let mut current_line = Line {
         words: Vec::new(),
         hyphenated: false,
     };
-    let font = options.font.definition(font::FontStyle::Regular);
-    trace!("Width: {}", options.width);
 
-    let words = text.split_whitespace();
-    for mut word in words {
+    let words = runs.iter().flat_map(|run| {
+        run.text
+            .split_whitespace()
+            .map(move |word| (word, run.style, run.breaking))
+    });
+    for (mut word, style, breaking) in words {
+        let font = options.font.definition(style);
         let mut word_width = font.word_width(word);
 
-        // add space before the word
-        if !current_line.words.is_empty() {
-            x += options.space_width;
-        }
-
         // advance to the next line
-        if x + word_width >= options.width {
+        if x + options.space_width + word_width >= options.width {
             if let Some((remaining, remaining_width)) =
-                hyphenate(x, word, &mut current_line, options)
+                hyphenate(x, word, &mut current_line, options, style)
             {
                 word = remaining;
                 word_width = font.word_width(word);
@@ -94,11 +111,7 @@ pub fn layout_text<'a>(options: Options, text: &'a str) -> Vec<Line<'a>> {
             }
 
             let space = options.width.saturating_sub(x);
-            if options.justify {
-                justify(space, &mut current_line.words);
-            } else {
-                nudge(options.alignment, space, &mut current_line.words);
-            }
+            align(alignment, space, &mut current_line.words);
             lines.push(current_line);
             x = 0;
             current_line = Line {
@@ -107,40 +120,44 @@ pub fn layout_text<'a>(options: Options, text: &'a str) -> Vec<Line<'a>> {
             };
         }
 
-        trace!("Word: '{}', width: {}, x: {}", word, word_width, x);
+        // add space before the word
+        if !current_line.words.is_empty() {
+            x += options.space_width;
+        }
 
         // Add word to current line
-        current_line.words.push(Word { text: word, x });
+        current_line.words.push(Text { text: word, x, style });
         x += word_width;
+
+        if breaking {
+            let space = options.width.saturating_sub(x);
+            align(alignment, space, &mut current_line.words);
+            lines.push(current_line);
+            x = 0;
+            current_line = Line {
+                words: Vec::new(),
+                hyphenated: false,
+            };
+        }
     }
 
     if !current_line.words.is_empty() {
         let space = options.width.saturating_sub(x);
-        nudge(options.alignment, space, &mut current_line.words);
-        
+        nudge(alignment, space, &mut current_line.words);
+
         lines.push(current_line);
     }
 
     lines
 }
 
-fn nudge(alignment: Alignment, space: u16, words: &mut [Word]) {
-    let offset = match alignment {
-        Alignment::Start => 0,
-        Alignment::Center => space / 2,
-        Alignment::End => space,
-    };
-    for word in words.iter_mut() {
-        word.x += offset;
-    }
-}
-
 /// Greedily hyphenate the given word to fit in the remaining space.
 fn hyphenate<'a>(
-    x: u16,
+    mut x: u16,
     word: &'a str,
     current_line: &mut Line<'a>,
     options: Options,
+    style: font::FontStyle,
 ) -> Option<(&'a str, u16)> {
     if word.len() < 5 {
         return None;
@@ -152,8 +169,8 @@ fn hyphenate<'a>(
     if space == 0 {
         return None;
     }
-    
-    let font = options.font.definition(font::FontStyle::Regular);
+
+    let font = options.font.definition(style);
     let mut length = 0;
     for part in hypher::hyphenate(word, options.language) {
         let part_width = font.word_width(part);
@@ -162,14 +179,20 @@ fn hyphenate<'a>(
                 return None;
             }
 
+            // add space before the word
+            if !current_line.words.is_empty() {
+                x += options.space_width;
+            }
+
             let text = &word[0..length];
             let text = if text.chars().last() != Some('-') {
                 text
             } else {
+                x += options.dash_width;
                 &text[0..text.len() - 1]
             };
             current_line.hyphenated = true;
-            current_line.words.push(Word { text, x });
+            current_line.words.push(Text { text, x, style });
             return Some((&word[length..], space));
         }
 
@@ -182,7 +205,7 @@ fn hyphenate<'a>(
 
 /// Justify the words in the current line by splitting
 /// the remaining space evenly between the words.
-fn justify(room: u16, words: &mut [Word]) {
+fn justify(room: u16, words: &mut [Text]) {
     let whitespaces = words.len().saturating_sub(1);
     if whitespaces == 0 {
         return;
@@ -197,5 +220,29 @@ fn justify(room: u16, words: &mut [Word]) {
         }
         word.x += offset + space;
         offset += space;
+    }
+}
+
+fn nudge_by(offset: u16, words: &mut [Text]) {
+    for word in words.iter_mut() {
+        word.x += offset;
+    }
+}
+
+fn nudge(alignment: Alignment, space: u16, words: &mut [Text]) {
+    match alignment {
+        Alignment::Start => { }
+        Alignment::Center => nudge_by(space / 2, words),
+        Alignment::End => nudge_by(space, words),
+        Alignment::Justify => { }
+    }
+}
+
+fn align(alignment: Alignment, space: u16, words: &mut [Text]) {
+    match alignment {
+        // we lay out like that anyway
+        Alignment::Start => { }
+        Alignment::Justify => justify(space, words),
+        _ => nudge(alignment, space, words),
     }
 }

@@ -19,7 +19,7 @@ impl FontSize {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FontStyle {
     Regular,
     Bold,
