@@ -64,15 +64,11 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
 
         let book = book::Book::from_file(&file_path, &mut file);
 
-        let cache_directory = book.as_ref().map(|book| alloc::format!("{}/{}", BASE_PATH, book.directory_name()));
+        let cache_directory = book.as_ref().map(|book| alloc::format!("{}/cache/{}", BASE_PATH, book.directory_name()));
         if let Some(path) = &cache_directory {
             filesystem.create_dir_all(path).ok();
         }
         let language = book.as_ref().and_then(|book| book.language()).unwrap_or(hypher::Lang::English);
-
-        // let progress = (0, 0, 0);
-        // let chapter_idx = progress.0;
-        // let chapter = book.as_ref().and_then(|b| b.chapter(chapter_idx, &mut file));
 
         ReaderActivity {
             filesystem,
@@ -103,7 +99,7 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
         let mut file = self.open_cache_file("progress.csv", crate::fs::Mode::Write)?;
         let Progress { paragraph, line } = self.progress.start;
         writeln!(file, "chapter;paragraph;line").ok()?;
-        writeln!(file, "{} {} {}", self.chapter_idx, paragraph, line).ok()?;
+        writeln!(file, "{};{};{}", self.chapter_idx, paragraph, line).ok()?;
         Some(())
     }
 
@@ -117,14 +113,11 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
             return None;
         }
         let line = lines.next()?;
-        let mut parts = line.split_whitespace();
+        let mut parts = line.split(';');
         let chapter_idx = parts.next()?.parse::<usize>().ok()?;
         let paragraph = parts.next()?.parse::<u16>().ok()?;
         let line = parts.next()?.parse::<u16>().ok()?;
 
-        // self.chapter_idx = chapter_idx;
-        // self.chapter = self.book.as_ref().and_then(|b| b.chapter(chapter_idx, &mut self.file));
-        // self.progress.start = Progress { paragraph, line };
         Some((chapter_idx, Progress { paragraph, line }))
     }
 
@@ -571,6 +564,16 @@ impl<Filesystem: crate::fs::Filesystem> super::Activity for ReaderActivity<Files
     fn draw(&mut self, display: &mut dyn crate::display::Display, buffers: &mut DisplayBuffers) {
         let Some(chapter) = &self.chapter else {
             warn!("No chapter");
+
+            buffers.clear(BinaryColor::On).ok();
+
+            Text::new("failed to load chapter", Point::new(10, 30), MonoTextStyle::new(&FONT_10X20, BinaryColor::Off))
+                .draw(buffers)
+                .ok();
+
+            self.display_settings(buffers);
+            self.display_footer(buffers);
+            display.display(buffers, RefreshMode::Fast);
             return;
         };
         let padding = 10;

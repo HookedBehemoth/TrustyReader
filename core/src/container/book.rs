@@ -1,5 +1,6 @@
 use alloc::{
-    borrow::ToOwned, string::{String, ToString}, vec::Vec
+    string::{String, ToString},
+    vec::Vec,
 };
 use log::info;
 
@@ -113,7 +114,15 @@ impl Book {
 
     pub fn directory_name(&self) -> String {
         let title = match &self.format {
-            BookFormat::Epub(epub) => &epub.metadata.title,
+            BookFormat::Epub(epub) => {
+                if let Some(author) = &epub.metadata.author {
+                    return alloc::format!(
+                        "{} - {}",
+                        author.replace(|c: char| UNSAFE_CHARS.contains(&c), "_"),
+                        epub.metadata.title.replace(|c: char| UNSAFE_CHARS.contains(&c), "_"))
+                }
+                epub.metadata.title.as_str()
+            },
             BookFormat::PlainText(title, _) => title,
             BookFormat::Markdown(title, _) => title,
             BookFormat::Xhtml(title, _) => title,
