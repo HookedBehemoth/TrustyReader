@@ -2,7 +2,10 @@ use alloc::{string::String, vec::Vec};
 use log::trace;
 
 use crate::{
-    container::book::{Chapter, Paragraph},
+    container::{
+        book::{Chapter, Paragraph},
+        css,
+    },
     layout,
     res::font,
 };
@@ -12,6 +15,7 @@ pub fn parse<R: embedded_io::Read>(
     title: Option<String>,
     reader: R,
     size: usize,
+    stylesheet: Option<&css::Stylesheet>,
 ) -> super::Result<Chapter> {
     // TODO: Ensure this is XHTML here or while parsing?
     let mut parser = xml::Reader::new(reader, size as _, 8096)?;
@@ -25,7 +29,7 @@ pub fn parse<R: embedded_io::Read>(
         trace!("XML event: {:?}", event);
         match event {
             xml::Event::StartElement { name: "body", .. } => {
-                paragraphs = parse_body(&mut parser)?;
+                paragraphs = parse_body(&mut parser, stylesheet)?;
                 break;
             }
             xml::Event::EndOfFile => break,
@@ -38,65 +42,78 @@ pub fn parse<R: embedded_io::Read>(
 
 fn parse_body<R: embedded_io::Read>(
     reader: &mut xml::OwnedReader<R>,
+    stylesheet: Option<&css::Stylesheet>,
 ) -> super::Result<Vec<Paragraph>> {
     let mut parser = BodyParser::new();
+
+    fn is_block_element(name: &str) -> bool {
+        matches!(name, "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "p")
+    }
+    fn is_bold(name: &str) -> bool {
+        matches!(name, "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "b")
+    }
 
     loop {
         let event = reader.next_event()?;
         trace!("XML event: {:?}", event);
         match event {
-            xml::Event::StartElement {
-                name: "h1" | "h2" | "h3" | "h4" | "h5" | "h6",
-                ..
-            } => {
-                parser.set_bold(true);
-            }
-            xml::Event::EndElement {
-                name: "h1" | "h2" | "h3" | "h4" | "h5" | "h6",
-                ..
-            } => {
-                parser.set_bold(false);
-            }
-            xml::Event::StartElement { name: "i", .. } => {
-                parser.set_italic(true);
-            }
-            xml::Event::EndElement { name: "i", .. } => {
-                parser.set_italic(false);
-            }
-            xml::Event::StartElement { name: "br", .. } => {
-                parser.break_line();
-            }
             xml::Event::EndElement { name: "body" } => break,
-            xml::Event::EndOfFile => break,
-            _ => {}
-        }
-        match event {
-            xml::Event::Text { .. } => {}
-            // xml::Event::StartElement { name, .. } => {
-            //     info!("Start element: {name}");
-            // }
-            // xml::Event::EndElement { name, .. } => {
-            //     info!("End element: {name}");
-            // }
-            _ => {
-                trace!("{event:?}");
+            xml::Event::StartElement { name, attrs } => {
+                parser.increase_depth();
+
+                let class = attrs.get("class");
+                let style = stylesheet
+                    .and_then(|s| class.map(|c| s.get(c)))
+                    .unwrap_or_default()
+                    + attrs
+                        .get("style")
+                        .map(css::Rule::from_str)
+                        .unwrap_or_default();
+
+                if is_bold(name) {
+                    parser.set_bold(true);
+                } else if name == "i" {
+                    parser.set_italic(true);
+                } else if name == "br" {
+                    parser.break_line();
+                }
+
+                if let Some(italic) = style.italic {
+                    parser.set_italic(italic);
+                    parser.italic_depth = Some(parser.depth);
+                }
+                if let Some(bold) = style.bold {
+                    parser.set_bold(bold);
+                    parser.bold_depth = Some(parser.depth);
+                }
+                if let Some(alignment) = style.alignment {
+                    parser.alignment = Some(alignment);
+                }
+                if let Some(indent) = style.indent {
+                    parser.indent = Some(indent);
+                }
+
+                if is_block_element(name) {
+                    parser.flush_run();
+                }
             }
-        }
-        match event {
-            xml::Event::StartElement {
-                name: "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "p",
-                ..
-            } => {
-                parser.flush_run();
-            }
-            xml::Event::EndElement {
-                name: "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "p",
-            } => {
-                parser.flush_run();
+            xml::Event::EndElement { name } => {
+                if is_bold(name) {
+                    parser.set_bold(false);
+                } else if name == "i" {
+                    parser.set_italic(false);
+                }
+
+                if is_block_element(name) {
+                    parser.flush_run();
+                }
+
+                parser.decrease_depth();
             }
             xml::Event::Text { content } => {
                 parser.push_text(content);
             }
+            xml::Event::EndOfFile => break,
             _ => {}
         }
     }
@@ -112,6 +129,9 @@ struct BodyParser {
     current_run: String,
     bold: bool,
     italic: bool,
+    depth: u8,
+    italic_depth: Option<u8>,
+    bold_depth: Option<u8>,
 }
 
 impl BodyParser {
@@ -124,6 +144,9 @@ impl BodyParser {
             current_run: String::new(),
             bold: false,
             italic: false,
+            depth: 0,
+            italic_depth: None,
+            bold_depth: None,
         }
     }
 
@@ -169,7 +192,13 @@ impl BodyParser {
         self.flush_text(false);
         if !self.runs.is_empty() {
             let runs = core::mem::take(&mut self.runs);
-            self.paragraphs.push(Paragraph { runs, indent: self.indent, alignment: self.alignment });
+            self.paragraphs.push(Paragraph {
+                runs,
+                indent: self.indent,
+                alignment: self.alignment,
+            });
+            self.indent = None;
+            self.alignment = None;
         }
     }
 
@@ -180,5 +209,27 @@ impl BodyParser {
 
     fn push_text(&mut self, text: &str) {
         self.current_run.push_str(text);
+    }
+
+    fn increase_depth(&mut self) {
+        self.depth += 1;
+    }
+
+    fn decrease_depth(&mut self) {
+        if self.depth > 0 {
+            self.depth -= 1;
+        }
+        if let Some(italic_depth) = self.italic_depth {
+            if self.depth < italic_depth {
+                self.set_italic(false);
+                self.italic_depth = None;
+            }
+        }
+        if let Some(bold_depth) = self.bold_depth {
+            if self.depth < bold_depth {
+                self.set_bold(false);
+                self.bold_depth = None;
+            }
+        }
     }
 }

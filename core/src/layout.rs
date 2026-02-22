@@ -91,45 +91,43 @@ pub fn layout_text<'a>(
         hyphenated: false,
     };
 
-    let words = runs.iter().flat_map(|run| {
-        run.text
-            .split_whitespace()
-            .map(move |word| (word, run.style, run.breaking))
-    });
-    for (mut word, style, breaking) in words {
-        let font = options.font.definition(style);
-        let mut word_width = font.word_width(word);
+    for run in runs {
+        let font = options.font.definition(run.style);
 
-        // advance to the next line
-        if x + options.space_width + word_width >= options.width {
-            if let Some((remaining, remaining_width)) =
-                hyphenate(x, word, &mut current_line, options, style)
-            {
-                word = remaining;
-                word_width = font.word_width(word);
-                x = options.width - remaining_width;
+        for mut word in run.text.split_whitespace() {
+            let mut word_width = font.word_width(word);
+
+            // advance to the next line
+            if x + options.space_width + word_width >= options.width {
+                if let Some((remaining, remaining_width)) =
+                    hyphenate(x, word, &mut current_line, options, run.style)
+                {
+                    word = remaining;
+                    word_width = font.word_width(word);
+                    x = options.width - remaining_width;
+                }
+
+                let space = options.width.saturating_sub(x);
+                align(alignment, space, &mut current_line.words);
+                lines.push(current_line);
+                x = 0;
+                current_line = Line {
+                    words: Vec::new(),
+                    hyphenated: false,
+                };
             }
 
-            let space = options.width.saturating_sub(x);
-            align(alignment, space, &mut current_line.words);
-            lines.push(current_line);
-            x = 0;
-            current_line = Line {
-                words: Vec::new(),
-                hyphenated: false,
-            };
+            // add space before the word
+            if !current_line.words.is_empty() {
+                x += options.space_width;
+            }
+
+            // Add word to current line
+            current_line.words.push(Text { text: word, x, style: run.style });
+            x += word_width;
         }
 
-        // add space before the word
-        if !current_line.words.is_empty() {
-            x += options.space_width;
-        }
-
-        // Add word to current line
-        current_line.words.push(Text { text: word, x, style });
-        x += word_width;
-
-        if breaking {
+        if run.breaking {
             let space = options.width.saturating_sub(x);
             align(alignment, space, &mut current_line.words);
             lines.push(current_line);

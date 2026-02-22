@@ -1,7 +1,7 @@
 use alloc::{borrow::ToOwned, boxed::Box, string::String, vec::Vec};
 use log::info;
 
-use crate::{fs::File, zip::{self, ZipEntryReader}};
+use crate::{container::css, fs::File, zip::{self, ZipEntryReader}};
 
 pub mod container;
 pub mod error;
@@ -43,6 +43,7 @@ pub struct Epub {
     pub metadata: opf::Metadata,
     pub toc: Option<ncx::TableOfContents>,
     pub cover: Option<u16>,
+    pub stylesheet: css::Stylesheet,
 }
 
 type PathBuf = heapless::String<256>;
@@ -84,5 +85,5 @@ pub fn parse_chapter(epub: &Epub, index: usize, file: &mut impl File) -> Result<
     info!("Chapter file entry: {}", entry.name);
     let reader = ZipEntryReader::new(file, entry)?;
 
-    spine::parse(title, reader, entry.size as usize).map_err(Into::into)
+    spine::parse(title, reader, entry.size as usize, Some(&epub.stylesheet)).map_err(Into::into)
 }

@@ -187,8 +187,6 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
         let font = font::Font::new(font::FontFamily::Bookerly, self.font_size);
         let options = layout::Options::new(
             (width - 2 * padding) as _,
-            // self.alignment,
-            // self.justify,
             self.language,
             font,
         );
@@ -222,9 +220,6 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
             return;
         }
         let last_para = chapter.paragraphs.len() - 1;
-        // let paragraph = &chapter.paragraphs[last_para];
-        // let indent = paragraph.indent.unwrap_or(self.indent);
-        // let lines = layout::layout_text(options, indent, &paragraph.runs);
         let lines = self.layout_text(options, &chapter.paragraphs[last_para]);
         // Try to show the last 10 lines
         // NOTE: unless we lay out the entire chapter, there doesn't seem to be a sane way of getting
@@ -294,8 +289,6 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
                 continue;
             }
 
-            // let indent = paragraph.indent.unwrap_or(self.indent);
-            // let para_lines = layout::layout_text(options, indent, &paragraph.runs);
             let para_lines = self.layout_text(options, paragraph);
             // How many lines from this paragraph are available
             let available = if para_idx == cur_para && at_line != usize::MAX {
@@ -534,8 +527,6 @@ impl<Filesystem: crate::fs::Filesystem> super::Activity for ReaderActivity<Files
         let font = font::Font::new(font::FontFamily::Bookerly, self.font_size);
         let options = layout::Options::new(
             (width - 2 * padding) as _,
-            // self.alignment,
-            // self.justify,
             self.language,
             font,
         );

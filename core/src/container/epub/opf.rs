@@ -7,10 +7,10 @@ use alloc::{
 use log::{error, info};
 
 use crate::{
-    container::epub::{
+    container::{css, epub::{
         Epub, FileResolver,
         error::{EpubError, RequiredFileTypes},
-    },
+    }},
     fs::File,
     zip::ZipEntryReader,
 };
@@ -101,6 +101,25 @@ pub fn parse(file: &mut impl File, file_resolver: FileResolver, rootfile: &str) 
         .and_then(|cover_id| manifest.get(cover_id))
         .map(|item| item.file_idx);
 
+    let stylesheet = manifest
+    .iter().filter(|(_, item)| item.media_type == MediaType::Css)
+    .fold(css::Stylesheet::new(), |mut sheet, (_, item)| {
+        let Some(entry) = file_resolver.entry(item.file_idx) else {
+            return sheet;
+        };
+
+        let Ok(reader) = ZipEntryReader::new(file, entry) else {
+            log::error!("Failed to read stylesheet entry: {}", entry.name);
+            return sheet;
+        };
+        let Some(text) = reader.read_to_end().ok().and_then(|bytes| String::from_utf8(bytes).ok()) else {
+            log::error!("Failed to read stylesheet content: {}", entry.name);
+            return sheet;
+        };
+        sheet.extend_from_sheet(&text);
+        sheet
+    });
+
     drop(manifest);
 
     let toc = if let Some(entry) = ncx_toc_entry {
@@ -128,6 +147,7 @@ pub fn parse(file: &mut impl File, file_resolver: FileResolver, rootfile: &str) 
         metadata: metadata.ok_or(EpubError::InvalidData)?,
         toc,
         cover,
+        stylesheet,
     };
     Ok(epub)
 }

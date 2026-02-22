@@ -2,11 +2,10 @@ use alloc::{
     string::{String, ToString},
     vec::Vec,
 };
-use core::fmt::Write;
 use log::info;
 
-use crate::{container::epub, fs::File, layout, res::font};
-use embedded_xml as xml;
+use super::{epub, markdown, plaintext, xml};
+use crate::{fs::File, layout};
 
 enum BookFormat {
     PlainText(String, String),
@@ -95,11 +94,13 @@ impl Book {
     pub fn chapter(&self, index: usize, file: &mut impl File) -> Option<Chapter> {
         let size = file.size();
         match &self.format {
-            BookFormat::PlainText(_, text) => Some(Chapter::from_plaintext(text)),
-            BookFormat::Markdown(_, text) => Some(Chapter::from_plaintext(text)),
+            BookFormat::PlainText(_, text) => Some(plaintext::from_str(text)),
+            BookFormat::Markdown(_, text) => Some(markdown::from_str(text)),
             BookFormat::Html(_, text) => Chapter::from_html(text),
-            BookFormat::Xml(_, text) => Chapter::from_xml(text),
-            BookFormat::Xhtml(_, text) => epub::spine::parse(None, text.as_bytes(), size).ok(),
+            BookFormat::Xml(_, text) => xml::from_str(text),
+            BookFormat::Xhtml(_, text) => {
+                epub::spine::parse(None, text.as_bytes(), size, None).ok()
+            }
             BookFormat::Epub(epub) => epub::parse_chapter(epub, index, file).ok(),
         }
     }
@@ -113,60 +114,11 @@ impl Book {
 }
 
 impl Chapter {
-    fn from_plaintext(text: &str) -> Self {
-        let paragraphs = text
-            .split("\n\n")
-            .map(|p| Paragraph {
-                runs: alloc::vec![layout::Run {
-                    text: p.to_string(),
-                    style: font::FontStyle::Regular,
-                    breaking: false,
-                }],
-                alignment: None,
-                indent: None,
-            })
-            .collect();
-        Chapter { title: None, paragraphs }
-    }
-
-    fn from_xml(text: &str) -> Option<Self> {
-        let mut reader = xml::Reader::new(text.as_bytes(), text.len() as _, 8096).ok()?;
-
-        let mut depth = 0;
-
-        let mut paragraphs = Vec::new();
-        loop {
-            let event = reader.next_event().ok()?;
-            match event {
-                xml::Event::StartElement { .. } => depth += 1,
-                xml::Event::EndElement { .. } => depth -= 1,
-                xml::Event::EndOfFile => break,
-                _ => {}
-            }
-            let mut text = String::new();
-            for _ in 0..depth {
-                text.push_str("-");
-            }
-            write!(text, "{event:?}\n\n").unwrap();
-            paragraphs.push(Paragraph {
-                runs: alloc::vec![layout::Run {
-                    text,
-                    style: font::FontStyle::Regular,
-                    breaking: false,
-                }],
-                alignment: None,
-                indent: None,
-            });
-        }
-
-        Some(Chapter { title: None, paragraphs })
-    }
-
     fn from_html(text: &str) -> Option<Self> {
         if text.contains("<?xml") {
-            epub::spine::parse(None, text.as_bytes(), text.len()).ok()
+            epub::spine::parse(None, text.as_bytes(), text.len(), None).ok()
         } else {
-            Some(Self::from_plaintext(text))
+            Some(plaintext::from_str(text))
         }
     }
 }
