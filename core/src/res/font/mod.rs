@@ -215,6 +215,11 @@ pub fn draw_glyph(
     let ymin = glyph.ymin();
 
     let size = display_buffers.size();
+    if x_offset > size.width as _ ||
+       y_offset > size.height as _{
+        warn!("Glyph not placed on screen");
+        return Ok(x_advance);
+    }
 
     trace!(
         "Drawing glyph U+{:04X} at offset ({}, {}) with size {}x{}, xmin {}, ymin {}",
