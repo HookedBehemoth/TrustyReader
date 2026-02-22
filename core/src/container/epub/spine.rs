@@ -53,6 +53,9 @@ fn parse_body<R: embedded_io::Read>(
     fn is_bold(name: &str) -> bool {
         matches!(name, "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "b")
     }
+    fn is_breaking(name: &str) -> bool {
+        matches!(name, "br" | "tr")
+    }
 
     loop {
         let event = reader.next_event()?;
@@ -79,7 +82,7 @@ fn parse_body<R: embedded_io::Read>(
                     parser.set_bold(true);
                 } else if is_italic(name) {
                     parser.set_italic(true);
-                } else if name == "br" {
+                } else if is_breaking(name) {
                     parser.break_line();
                 }
 
