@@ -5,22 +5,22 @@ use alloc::{
 use embedded_graphics::{
     Drawable, mono_font::{MonoTextStyle, ascii::FONT_10X20}, pixelcolor::BinaryColor, prelude::{DrawTarget, OriginDimensions, Point, Primitive, Size}, primitives::{Line, PrimitiveStyle, Rectangle}, text::Text
 };
+use embedded_io::Write;
 use log::{info, warn};
 
 use crate::{
-    container::book,
-    display::RefreshMode,
-    framebuffer::DisplayBuffers,
-    input::Buttons,
-    layout,
-    res::font,
+    container::book, display::RefreshMode, framebuffer::DisplayBuffers, fs::File, input::Buttons, layout, res::font
 };
+
+const BASE_PATH: &str = ".trusty";
+
 pub struct ReaderActivity<Filesystem>
 where
     Filesystem: crate::fs::Filesystem,
 {
     filesystem: Filesystem,
     file_path: String,
+    cache_directory: Option<String>,
     show_settings: bool,
     settings_cursor: usize,
     font_size: font::FontSize,
@@ -63,13 +63,21 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
             .unwrap();
 
         let book = book::Book::from_file(&file_path, &mut file);
+
+        let cache_directory = book.as_ref().map(|book| alloc::format!("{}/{}", BASE_PATH, book.directory_name()));
+        if let Some(path) = &cache_directory {
+            filesystem.create_dir_all(path).ok();
+        }
         let language = book.as_ref().and_then(|book| book.language()).unwrap_or(hypher::Lang::English);
 
-        let chapter = book.as_ref().and_then(|b| b.chapter(0, &mut file));
+        // let progress = (0, 0, 0);
+        // let chapter_idx = progress.0;
+        // let chapter = book.as_ref().and_then(|b| b.chapter(chapter_idx, &mut file));
 
         ReaderActivity {
             filesystem,
             file_path,
+            cache_directory,
             show_settings: false,
             settings_cursor: 0,
             font_size: font::FontSize::Size26,
@@ -80,9 +88,44 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
             file,
             book,
             chapter_idx: 0,
-            chapter,
+            chapter: None,
             progress: Page::default(),
         }
+    }
+
+    fn open_cache_file(&self, name: &str, mode: crate::fs::Mode) -> Option<Filesystem::File> {
+        let cache_directory = self.cache_directory.as_ref()?;
+        let path = alloc::format!("{}/{}", cache_directory, name);
+        self.filesystem.open_file(&path, mode).ok()
+    }
+
+    fn store_progress(&self) -> Option<()> {
+        let mut file = self.open_cache_file("progress.csv", crate::fs::Mode::Write)?;
+        let Progress { paragraph, line } = self.progress.start;
+        writeln!(file, "chapter;paragraph;line").ok()?;
+        writeln!(file, "{} {} {}", self.chapter_idx, paragraph, line).ok()?;
+        Some(())
+    }
+
+    fn load_progress(&self) -> Option<(usize, Progress)> {
+        let mut file = self.open_cache_file("progress.csv", crate::fs::Mode::Read)?;
+        let contents = file.read_to_end().ok()?;
+        let text = String::from_utf8(contents).ok()?;
+        let mut lines = text.lines();
+        let header = lines.next()?;
+        if header.trim() != "chapter;paragraph;line" {
+            return None;
+        }
+        let line = lines.next()?;
+        let mut parts = line.split_whitespace();
+        let chapter_idx = parts.next()?.parse::<usize>().ok()?;
+        let paragraph = parts.next()?.parse::<u16>().ok()?;
+        let line = parts.next()?.parse::<u16>().ok()?;
+
+        // self.chapter_idx = chapter_idx;
+        // self.chapter = self.book.as_ref().and_then(|b| b.chapter(chapter_idx, &mut self.file));
+        // self.progress.start = Progress { paragraph, line };
+        Some((chapter_idx, Progress { paragraph, line }))
     }
 
     fn draw_layed_out_text(
@@ -487,7 +530,16 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
 }
 
 impl<Filesystem: crate::fs::Filesystem> super::Activity for ReaderActivity<Filesystem> {
-    fn start(&mut self) {}
+    fn start(&mut self) {
+        let progress = self.load_progress().unwrap_or((0, Progress { paragraph: 0, line: 0 }));
+        self.chapter_idx = progress.0;
+        self.chapter = self.book.as_ref().and_then(|b| b.chapter(self.chapter_idx, &mut self.file));
+        self.progress.start = progress.1;
+    }
+
+    fn close(&mut self) {
+        self.store_progress();
+    }
 
     fn update(&mut self, state: &super::ApplicationState) -> super::UpdateResult {
         if self.show_settings {

@@ -3,12 +3,12 @@ use alloc::boxed::Box;
 use alloc::string::ToString;
 use log::info;
 
+use crate::activities::ActivityType;
 use crate::activities::demo::DemoActivity;
 use crate::activities::filebrowser::FileBrowser;
 use crate::activities::home::HomeActivity;
 use crate::activities::reader::ReaderActivity;
 use crate::activities::settings::SettingsActivity;
-use crate::activities::ActivityType;
 
 use crate::display::RefreshMode;
 use crate::res::img::bebop;
@@ -40,8 +40,13 @@ where
         Self::with_intent(display_buffers, filesystem, ActivityType::home())
     }
 
-    pub fn with_intent(display_buffers: &'a mut DisplayBuffers, filesystem: Filesystem, activity_type: ActivityType) -> Self {
-        let activity = Self::create_activity(&activity_type, &filesystem);
+    pub fn with_intent(
+        display_buffers: &'a mut DisplayBuffers,
+        filesystem: Filesystem,
+        activity_type: ActivityType,
+    ) -> Self {
+        let mut activity = Self::create_activity(&activity_type, &filesystem);
+        activity.start();
 
         Application {
             dirty: true,
@@ -118,6 +123,7 @@ where
     }
 
     fn open(&mut self, activity_type: ActivityType) {
+        self.activity.close();
         self.activity = Self::create_activity(&activity_type, &self.filesystem);
         self.activity.start();
         self.dirty = true;
@@ -134,10 +140,15 @@ where
             }
             ActivityType::Settings => Box::new(SettingsActivity::new()),
             ActivityType::Demo => Box::new(DemoActivity::new()),
-            ActivityType::Reader { path } => Box::new(ReaderActivity::new(
-                filesystem.clone(),
-                path.to_string(),
-            )),
+            ActivityType::Reader { path } => {
+                Box::new(ReaderActivity::new(filesystem.clone(), path.to_string()))
+            }
         }
+    }
+}
+
+impl<'a, Filesystem> Drop for Application<'a, Filesystem> {
+    fn drop(&mut self) {
+        self.activity.close();
     }
 }

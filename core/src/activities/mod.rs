@@ -61,6 +61,7 @@ pub struct ApplicationState {
 
 pub trait Activity {
     fn start(&mut self);
+    fn close(&mut self) {}
     fn update(&mut self, state: &ApplicationState) -> UpdateResult;
     fn draw(&mut self, display: &mut dyn Display, buffers: &mut DisplayBuffers);
 }

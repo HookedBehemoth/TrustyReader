@@ -72,6 +72,7 @@ pub enum Block<'a> {
 }
 
 /// Input for layouting.
+#[derive(Debug)]
 pub struct Run {
     pub text: String,
     pub style: font::FontStyle,
@@ -129,7 +130,7 @@ pub fn layout_text<'a>(
 
         if run.breaking {
             let space = options.width.saturating_sub(x);
-            align(alignment, space, &mut current_line.words);
+            nudge(alignment, space, &mut current_line.words);
             lines.push(current_line);
             x = 0;
             current_line = Line {

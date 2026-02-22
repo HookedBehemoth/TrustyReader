@@ -1,6 +1,5 @@
 use alloc::{
-    string::{String, ToString},
-    vec::Vec,
+    borrow::ToOwned, string::{String, ToString}, vec::Vec
 };
 use log::info;
 
@@ -67,7 +66,7 @@ impl Book {
                 let contents = file.read_to_end().ok()?;
                 let text = String::from_utf8(contents).ok()?;
                 BookFormat::PlainText(name.to_string(), text)
-            } // _ => return None,
+            }
         };
 
         Some(Book { format })
@@ -111,7 +110,22 @@ impl Book {
             _ => None,
         }
     }
+
+    pub fn directory_name(&self) -> String {
+        let title = match &self.format {
+            BookFormat::Epub(epub) => &epub.metadata.title,
+            BookFormat::PlainText(title, _) => title,
+            BookFormat::Markdown(title, _) => title,
+            BookFormat::Xhtml(title, _) => title,
+            BookFormat::Html(title, _) => title,
+            BookFormat::Xml(title, _) => title,
+        };
+
+        title.replace(|c: char| UNSAFE_CHARS.contains(&c), "_")
+    }
 }
+
+const UNSAFE_CHARS: &[char] = &['/', '\\', '?', '%', '*', ':', '|', '"', '<', '>'];
 
 impl Chapter {
     fn from_html(text: &str) -> Option<Self> {

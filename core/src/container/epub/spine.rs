@@ -22,8 +22,6 @@ pub fn parse<R: embedded_io::Read>(
 
     let mut paragraphs = alloc::vec![];
 
-    // TODO: semantic parsing
-    // TODO: style sheet parsing
     loop {
         let event = parser.next_event()?;
         trace!("XML event: {:?}", event);
@@ -47,7 +45,10 @@ fn parse_body<R: embedded_io::Read>(
     let mut parser = BodyParser::new();
 
     fn is_block_element(name: &str) -> bool {
-        matches!(name, "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "p")
+        matches!(name, "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "p" | "li")
+    }
+    fn is_italic(name: &str) -> bool {
+        matches!(name, "i" | "em")
     }
     fn is_bold(name: &str) -> bool {
         matches!(name, "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "b")
@@ -59,6 +60,10 @@ fn parse_body<R: embedded_io::Read>(
         match event {
             xml::Event::EndElement { name: "body" } => break,
             xml::Event::StartElement { name, attrs } => {
+                if is_block_element(name) {
+                    parser.flush_run();
+                }
+
                 parser.increase_depth();
 
                 let class = attrs.get("class");
@@ -72,7 +77,7 @@ fn parse_body<R: embedded_io::Read>(
 
                 if is_bold(name) {
                     parser.set_bold(true);
-                } else if name == "i" {
+                } else if is_italic(name) {
                     parser.set_italic(true);
                 } else if name == "br" {
                     parser.break_line();
@@ -92,20 +97,16 @@ fn parse_body<R: embedded_io::Read>(
                 if let Some(indent) = style.indent {
                     parser.indent = Some(indent);
                 }
-
-                if is_block_element(name) {
-                    parser.flush_run();
-                }
             }
             xml::Event::EndElement { name } => {
-                if is_bold(name) {
-                    parser.set_bold(false);
-                } else if name == "i" {
-                    parser.set_italic(false);
-                }
-
                 if is_block_element(name) {
                     parser.flush_run();
+                }
+
+                if is_bold(name) {
+                    parser.set_bold(false);
+                } else if is_italic(name) {
+                    parser.set_italic(false);
                 }
 
                 parser.decrease_depth();

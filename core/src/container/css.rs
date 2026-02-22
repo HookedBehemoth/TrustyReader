@@ -147,8 +147,8 @@ impl Rule {
             match key.trim() {
                 "text-align" => {
                     rule.alignment = match value.trim() {
-                        "start" => Some(layout::Alignment::Start),
-                        "end" => Some(layout::Alignment::End),
+                        "start" | "left" => Some(layout::Alignment::Start),
+                        "end" | "right" => Some(layout::Alignment::End),
                         "center" => Some(layout::Alignment::Center),
                         "justify" => Some(layout::Alignment::Justify),
                         _ => None,
