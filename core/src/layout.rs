@@ -1,4 +1,5 @@
 use alloc::{string::String, vec::Vec};
+use log::info;
 
 use crate::res::font;
 
@@ -94,6 +95,15 @@ pub fn layout_text<'a>(
 
     for run in runs {
         let font = options.font.definition(run.style);
+
+        // keep the spaces on newlines
+        if current_line.words.is_empty() {
+            run.text.chars().take_while(|c| c.is_whitespace()).for_each(|c| {
+                if let Some(width) = font.char_width(c) {
+                    x += width as u16;
+                }
+            });
+        }
 
         for mut word in run.text.split_whitespace() {
             let mut word_width = font.word_width(word);

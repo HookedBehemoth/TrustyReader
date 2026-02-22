@@ -299,7 +299,10 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
         // We iterate from cur_para down to 0
         // Start from the paragraph just before current position
         let mut first_iter = true;
-        let mut para_idx = if cur_line > 0 { cur_para } else { cur_para.saturating_sub(1) };
+        let mut para_idx = core::cmp::min(
+            if cur_line > 0 { cur_para } else { cur_para.saturating_sub(1) },
+            chapter.paragraphs.len().saturating_sub(1),
+        );
         let at_line = if cur_line > 0 { cur_line } else { usize::MAX };
 
         loop {

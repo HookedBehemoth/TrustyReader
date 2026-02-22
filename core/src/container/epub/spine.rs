@@ -1,4 +1,4 @@
-use alloc::{string::String, vec::Vec};
+use alloc::{string::{String, ToString}, vec::Vec};
 use log::trace;
 
 use crate::{
@@ -195,7 +195,11 @@ impl BodyParser {
     fn flush_run(&mut self) {
         self.flush_text(false);
         if !self.runs.is_empty() {
-            let runs = core::mem::take(&mut self.runs);
+            let mut runs = core::mem::take(&mut self.runs);
+            // trim whitespace off the end of the last run
+            runs.last_mut().map(|run| {
+                run.text = run.text.trim_ascii_end().to_string();
+            });
             self.paragraphs.push(Paragraph {
                 runs,
                 indent: self.indent,
@@ -212,7 +216,11 @@ impl BodyParser {
     }
 
     fn push_text(&mut self, text: &str) {
-        self.current_run.push_str(text);
+        if self.runs.is_empty() && self.current_run.is_empty() {
+            self.current_run.push_str(text.trim_ascii_start());
+        } else {
+            self.current_run.push_str(text);
+        }
     }
 
     fn increase_depth(&mut self) {
