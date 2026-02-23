@@ -1,5 +1,4 @@
 use alloc::{string::String, vec::Vec};
-use log::info;
 
 use crate::res::font;
 

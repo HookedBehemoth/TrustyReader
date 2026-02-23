@@ -1,12 +1,12 @@
 use alloc::boxed::Box;
 
-use alloc::string::ToString;
 use log::info;
 
 use crate::activities::ActivityType;
 use crate::activities::demo::DemoActivity;
 use crate::activities::filebrowser::FileBrowser;
 use crate::activities::home::HomeActivity;
+use crate::activities::imageviewer::ImageViewerActivity;
 use crate::activities::reader::ReaderActivity;
 use crate::activities::settings::SettingsActivity;
 
@@ -141,7 +141,12 @@ where
             ActivityType::Settings => Box::new(SettingsActivity::new()),
             ActivityType::Demo => Box::new(DemoActivity::new()),
             ActivityType::Reader { path } => {
-                Box::new(ReaderActivity::new(filesystem.clone(), path.to_string()))
+                let ext = path.rsplit('.').next().unwrap_or(path);
+                if ext.eq_ignore_ascii_case("tbmp") {
+                    Box::new(ImageViewerActivity::new(filesystem, path))
+                } else {
+                    Box::new(ReaderActivity::new(filesystem.clone(), path))
+                }
             }
         }
     }

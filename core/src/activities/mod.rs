@@ -8,6 +8,7 @@ use crate::{
 pub mod demo;
 pub mod filebrowser;
 pub mod home;
+pub mod imageviewer;
 pub mod reader;
 pub mod settings;
 
@@ -35,9 +36,7 @@ impl ActivityType {
         }
     }
     pub fn reader(path: &str) -> Self {
-        ActivityType::Reader {
-            path: path.try_into().unwrap(),
-        }
+        ActivityType::Reader { path: path.try_into().unwrap() }
     }
 }
 
@@ -60,7 +59,7 @@ pub struct ApplicationState {
 }
 
 pub trait Activity {
-    fn start(&mut self);
+    fn start(&mut self) {}
     fn close(&mut self) {}
     fn update(&mut self, state: &ApplicationState) -> UpdateResult;
     fn draw(&mut self, display: &mut dyn Display, buffers: &mut DisplayBuffers);

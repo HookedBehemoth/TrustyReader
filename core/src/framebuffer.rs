@@ -128,6 +128,26 @@ impl DisplayBuffers {
             }
         }
     }
+
+    pub fn blit(&mut self, src: &[u8], w: u16, h: u16) {
+        let Size { width, height } = self.size();
+
+        let offset_x = (width as i32 - w as i32) / 2;
+        let offset_y = (height as i32 - h as i32) / 2;
+
+        for y in 0..h as _ {
+            for x in 0..w as _ {
+                let index = (y as usize * w as usize + x as usize) / 8;
+                let bit_index = 7 - ((y as usize * w as usize + x as usize) % 8);
+                let color = if (src[index] >> bit_index) & 1 == 1 {
+                    BinaryColor::On
+                } else {
+                    BinaryColor::Off
+                };
+                self.set_pixel(x as i32 + offset_x, y as i32 + offset_y, color);
+            }
+        }
+    }
 }
 
 impl OriginDimensions for DisplayBuffers {

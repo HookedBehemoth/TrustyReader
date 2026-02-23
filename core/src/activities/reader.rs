@@ -19,7 +19,6 @@ where
     Filesystem: crate::fs::Filesystem,
 {
     filesystem: Filesystem,
-    file_path: String,
     cache_directory: Option<String>,
     show_settings: bool,
     settings_cursor: usize,
@@ -56,7 +55,7 @@ struct Progress {
 }
 
 impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
-    pub fn new(filesystem: Filesystem, file_path: String) -> Self {
+    pub fn new(filesystem: Filesystem, file_path: &str) -> Self {
         info!("Opening EPUB reader for path: {}", file_path);
         let mut file = filesystem
             .open_file(&file_path, crate::fs::Mode::Read)
@@ -72,7 +71,6 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
 
         ReaderActivity {
             filesystem,
-            file_path,
             cache_directory,
             show_settings: false,
             settings_cursor: 0,
@@ -424,13 +422,13 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
             .draw(buffers)
             .ok();
         
-        // Justify
-        // Text::new("Justify:", Point::new(desc_pos, size.height as i32 / 2 + 110), text_style)
-        //     .draw(buffers)
-        //     .ok();
-        // Text::new(if self.justify { "On" } else { "Off" }, Point::new(value_pos, size.height as i32 / 2 + 110), text_style)
-        //     .draw(buffers)
-        //     .ok();
+        // Indent
+        Text::new("Indent:", Point::new(desc_pos, size.height as i32 / 2 + 110), text_style)
+            .draw(buffers)
+            .ok();
+        Text::new(&alloc::format!("{}", self.indent), Point::new(value_pos, size.height as i32 / 2 + 110), text_style)
+            .draw(buffers)
+            .ok();
 
         // Rotation
         Text::new("Rotation:", Point::new(desc_pos, size.height as i32 / 2 + 140), text_style)
@@ -492,7 +490,13 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
                     End => Justify,
                     Justify => Start,
                 },
-                // 2 => self.justify = !self.justify,
+                2 => self.indent = match self.indent {
+                    0 => 10,
+                    10 => 20,
+                    20 => 30,
+                    30 => 40,
+                    _ => 0,
+                },
                 3 => {
                     let new_rotation = match state.rotation {
                         Rotate0 => Rotate90,

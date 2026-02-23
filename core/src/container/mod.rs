@@ -1,7 +1,9 @@
 pub mod book;
 pub mod css;
 pub mod epub;
+pub mod image;
 pub mod markdown;
 pub mod plaintext;
+pub mod tbmp;
 pub mod xml;
 pub mod xt;
