@@ -1,4 +1,7 @@
-use alloc::{string::{String, ToString}, vec::Vec};
+use alloc::{
+    string::{String, ToString},
+    vec::Vec,
+};
 use log::trace;
 
 use crate::{
@@ -134,6 +137,7 @@ struct BodyParser {
     bold: bool,
     italic: bool,
     depth: u8,
+    has_trailing_space: bool,
     italic_depth: Option<u8>,
     bold_depth: Option<u8>,
 }
@@ -149,6 +153,7 @@ impl BodyParser {
             bold: false,
             italic: false,
             depth: 0,
+            has_trailing_space: false,
             italic_depth: None,
             bold_depth: None,
         }
@@ -216,10 +221,27 @@ impl BodyParser {
     }
 
     fn push_text(&mut self, text: &str) {
-        if self.runs.is_empty() && self.current_run.is_empty() {
-            self.current_run.push_str(text.trim_ascii_start());
+        let text = if self.runs.is_empty() && self.current_run.is_empty() {
+            text.trim_ascii_start()
         } else {
-            self.current_run.push_str(text);
+            text
+        };
+        if !self.has_trailing_space && text.starts_with(char::is_whitespace) {
+            self.current_run.push(' ');
+        }
+        self.has_trailing_space = text.ends_with(char::is_whitespace);
+        let text = text
+            .split_whitespace()
+            .fold(String::new(), |mut acc, word| {
+                if !acc.is_empty() {
+                    acc.push(' ');
+                }
+                acc.push_str(word);
+                acc
+            });
+        self.current_run.push_str(&text);
+        if self.has_trailing_space {
+            self.current_run.push(' ');
         }
     }
 
@@ -243,5 +265,57 @@ impl BodyParser {
                 self.bold_depth = None;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use alloc::string::ToString;
+
+    use crate::{layout::Run, res::font::FontStyle};
+
+    #[test]
+    fn inline_styles() {
+        let body = r#"
+        <?xml version="1.0" encoding="utf-8"?>
+        <html xmlns="http://www.w3.org/1999/xhtml">
+            <body>
+                <p>Text with <i>Inline</i> styles <b>bold</b>, <em>emphasized</em> or <i>italic</i></p>
+            </body>
+        </html>"#;
+        let chapter = super::parse(None, body.as_bytes(), body.len(), None).unwrap();
+        assert_eq!(chapter.paragraphs.len(), 1);
+        let mut runs = chapter.paragraphs[0].runs.iter();
+        assert_eq!(runs.next().unwrap(), &Run { text: "Text with ".to_string(), style: FontStyle::Regular, breaking: false });
+        assert_eq!(runs.next().unwrap(), &Run { text: "Inline".to_string(), style: FontStyle::Italic, breaking: false });
+        assert_eq!(runs.next().unwrap(), &Run { text: " styles ".to_string(), style: FontStyle::Regular, breaking: false });
+        assert_eq!(runs.next().unwrap(), &Run { text: "bold".to_string(), style: FontStyle::Bold, breaking: false });
+        assert_eq!(runs.next().unwrap(), &Run { text: ", ".to_string(), style: FontStyle::Regular, breaking: false });
+        assert_eq!(runs.next().unwrap(), &Run { text: "emphasized".to_string(), style: FontStyle::Italic, breaking: false });
+        assert_eq!(runs.next().unwrap(), &Run { text: " or ".to_string(), style: FontStyle::Regular, breaking: false });
+        assert_eq!(runs.next().unwrap(), &Run { text: "italic".to_string(), style: FontStyle::Italic, breaking: false });
+        assert!(runs.next().is_none());
+    }
+
+    // https://patrickbrosset.medium.com/when-does-white-space-matter-in-html-b90e8a7cdd33
+    #[test]
+    fn test_whitespace() {
+        let body = r#"
+        <?xml version="1.0" encoding="utf-8"?>
+        <html xmlns="http://www.w3.org/1999/xhtml">
+            <body>
+                <p> Text
+                    
+                 with <span> White </span> space<span> before</span> and <span>after</span>Spans
+                 
+                </p>
+            </body>
+        </html>"#;
+        let chapter = super::parse(None, body.as_bytes(), body.len(), None).unwrap();
+        assert_eq!(chapter.paragraphs.len(), 1);
+        let paragraph = &chapter.paragraphs[0];
+        assert_eq!(paragraph.runs.len(), 1);
+        let run = &paragraph.runs[0];
+        assert_eq!(run.text, "Text with White space before and afterSpans");
     }
 }

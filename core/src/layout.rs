@@ -72,7 +72,7 @@ pub enum Block<'a> {
 }
 
 /// Input for layouting.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Run {
     pub text: String,
     pub style: font::FontStyle,
