@@ -4,15 +4,15 @@ use alloc::{
 };
 use log::info;
 
-use super::{epub, markdown, plaintext, xml};
-use crate::{fs::File, layout};
+use super::{epub, markdown, plaintext, xml, css};
+use crate::{fs::{self, File, Filesystem}, layout};
 
 enum BookFormat {
     PlainText(String, String),
     Markdown(String, String),
     Xml(String, String),
-    Html(String, String),
-    Xhtml(String, String),
+    Html(String, String, Option<css::Stylesheet>),
+    Xhtml(String, String, Option<css::Stylesheet>),
     Epub(epub::Epub),
 }
 
@@ -35,9 +35,9 @@ pub struct Paragraph {
 }
 
 impl Book {
-    pub fn from_file(file_name: &str, file: &mut impl File) -> Option<Self> {
-        info!("Loading book from file: {}", file_name);
-        let (name, ext) = file_name.rsplit_once('.').unwrap_or((file_name, ""));
+    pub fn from_file(file_path: &str, filesystem: &impl Filesystem, file: &mut impl File) -> Option<Self> {
+        info!("Loading book from file: {}", file_path);
+        let (name, ext) = file_path.rsplit_once('.').unwrap_or((file_path, ""));
         let format = match ext.to_ascii_lowercase().as_str() {
             "md" => {
                 let contents = file.read_to_end().ok()?;
@@ -56,12 +56,29 @@ impl Book {
             "html" => {
                 let contents = file.read_to_end().ok()?;
                 let text = String::from_utf8(contents).ok()?;
-                BookFormat::Html(name.to_string(), text)
+                let css_path = alloc::format!("{}.css", name);
+                let stylesheet = filesystem.open_file(&css_path, fs::Mode::Read).ok().and_then(|mut css_file| {
+                    let css_contents = css_file.read_to_end().ok()?;
+                    let css_text = String::from_utf8(css_contents).ok()?;
+                    let mut stylesheet = css::Stylesheet::new();
+                    stylesheet.extend_from_sheet(&css_text);
+                    Some(stylesheet)
+                });
+                BookFormat::Html(name.to_string(), text, stylesheet)
             }
             "xhtml" => {
                 let contents = file.read_to_end().ok()?;
                 let text = String::from_utf8(contents).ok()?;
-                BookFormat::Xhtml(name.to_string(), text)
+
+                let css_path = alloc::format!("{}.css", name);
+                let stylesheet = filesystem.open_file(&css_path, fs::Mode::Read).ok().and_then(|mut css_file| {
+                    let css_contents = css_file.read_to_end().ok()?;
+                    let css_text = String::from_utf8(css_contents).ok()?;
+                    let mut stylesheet = css::Stylesheet::new();
+                    stylesheet.extend_from_sheet(&css_text);
+                    Some(stylesheet)
+                });
+                BookFormat::Xhtml(name.to_string(), text, stylesheet)
             }
             _ => {
                 let contents = file.read_to_end().ok()?;
@@ -77,8 +94,8 @@ impl Book {
         match &self.format {
             BookFormat::PlainText(title, _) => title,
             BookFormat::Markdown(title, _) => title,
-            BookFormat::Xhtml(title, _) => title,
-            BookFormat::Html(title, _) => title,
+            BookFormat::Xhtml(title, _, _) => title,
+            BookFormat::Html(title, _, _) => title,
             BookFormat::Xml(title, _) => title,
             BookFormat::Epub(epub) => &epub.metadata.title,
         }
@@ -96,10 +113,10 @@ impl Book {
         match &self.format {
             BookFormat::PlainText(_, text) => Some(plaintext::from_str(text)),
             BookFormat::Markdown(_, text) => Some(markdown::from_str(text)),
-            BookFormat::Html(_, text) => Chapter::from_html(text),
+            BookFormat::Html(_, text, stylesheet) => Chapter::from_html(text, stylesheet.as_ref()),
             BookFormat::Xml(_, text) => xml::from_str(text),
-            BookFormat::Xhtml(_, text) => {
-                epub::spine::parse(None, text.as_bytes(), size, None).ok()
+            BookFormat::Xhtml(_, text, stylesheet) => {
+                epub::spine::parse(None, text.as_bytes(), size, stylesheet.as_ref()).ok()
             }
             BookFormat::Epub(epub) => epub::parse_chapter(epub, index, file).ok(),
         }
@@ -125,8 +142,8 @@ impl Book {
             },
             BookFormat::PlainText(title, _) => title,
             BookFormat::Markdown(title, _) => title,
-            BookFormat::Xhtml(title, _) => title,
-            BookFormat::Html(title, _) => title,
+            BookFormat::Xhtml(title, _, _) => title,
+            BookFormat::Html(title, _, _) => title,
             BookFormat::Xml(title, _) => title,
         };
 
@@ -137,9 +154,9 @@ impl Book {
 const UNSAFE_CHARS: &[char] = &['/', '\\', '?', '%', '*', ':', '|', '"', '<', '>'];
 
 impl Chapter {
-    fn from_html(text: &str) -> Option<Self> {
+    fn from_html(text: &str, stylesheet: Option<&css::Stylesheet>) -> Option<Self> {
         if text.contains("<?xml") {
-            epub::spine::parse(None, text.as_bytes(), text.len(), None).ok()
+            epub::spine::parse(None, text.as_bytes(), text.len(), stylesheet).ok()
         } else {
             Some(plaintext::from_str(text))
         }

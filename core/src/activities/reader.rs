@@ -61,7 +61,7 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
             .open_file(&file_path, crate::fs::Mode::Read)
             .unwrap();
 
-        let book = book::Book::from_file(&file_path, &mut file);
+        let book = book::Book::from_file(&file_path, &filesystem, &mut file);
 
         let cache_directory = book.as_ref().map(|book| alloc::format!("{}/cache/{}", BASE_PATH, book.directory_name()));
         if let Some(path) = &cache_directory {
