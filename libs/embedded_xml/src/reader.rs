@@ -83,7 +83,7 @@ impl<R: embedded_io::Read, Buffer: AsRef<[u8]> + AsMut<[u8]>> Reader<R, Buffer> 
     }
 
     /// Advances the reader to the next event and returns it.
-    /// 
+    ///
     /// # Examples
     /// ```
     /// # use embedded_xml as xml;
@@ -215,11 +215,15 @@ impl<R: embedded_io::Read, Buffer: AsRef<[u8]> + AsMut<[u8]>> Reader<R, Buffer> 
         self.pos += end + n_end.len();
         Ok(event)
     }
-    pub fn name_and_attrs(block: &[u8]) -> Result<(&str, AttributeReader<'_>)> {
+
+    fn name_and_attrs(block: &[u8]) -> Result<(&str, AttributeReader<'_>)> {
         let block = core::str::from_utf8(block)?;
-        let mut split = block.split_ascii_whitespace();
-        let name = split.next().unwrap_or("");
-        Ok((name, AttributeReader::from_split(split)))
+
+        if let Some((name, rest)) = block.split_once(|c: char| c.is_ascii_whitespace()) {
+            Ok((name, AttributeReader::from_block(rest)))
+        } else {
+            Ok((block, AttributeReader::from_block("")))
+        }
     }
 
     /// Moves the unparsed characters starting from offset to the beginning
@@ -322,16 +326,6 @@ impl<R: embedded_io::Read, Buffer: AsRef<[u8]> + AsMut<[u8]>> Reader<R, Buffer> 
         &self.buffer.as_ref()[self.pos..self.end]
     }
 }
-
-// impl<R: embedded_io::Read, Buffer: AsRef<[u8]> + AsMut<[u8]>> core::fmt::Debug for Reader<R, Buffer> {
-//     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-//         f.debug_struct("Reader")
-//             .field("pos", &self.pos)
-//             .field("end", &self.end)
-//             .field("remaining", &self.remaining)
-//             .finish()
-//     }
-// }
 
 fn find_span(buffer: &[u8], start: &[u8], end: &[u8]) -> Option<(usize, Option<usize>)> {
     let start = memchr::memmem::find(buffer, start)? + start.len();

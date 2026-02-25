@@ -1,7 +1,7 @@
 /// XML attribute reader
 #[derive(Clone)]
 pub struct AttributeReader<'a> {
-    split: core::str::SplitAsciiWhitespace<'a>,
+    remaining: &'a str,
 }
 
 impl core::fmt::Debug for AttributeReader<'_> {
@@ -16,9 +16,7 @@ impl core::fmt::Debug for AttributeReader<'_> {
 
 impl Default for AttributeReader<'_> {
     fn default() -> Self {
-        AttributeReader {
-            split: "".split_ascii_whitespace(),
-        }
+        AttributeReader { remaining: "" }
     }
 }
 
@@ -40,22 +38,8 @@ impl<'a> AttributeReader<'a> {
     /// ```
     pub fn from_block(buffer: &str) -> AttributeReader<'_> {
         AttributeReader {
-            split: buffer.trim_ascii().split_ascii_whitespace(),
+            remaining: buffer.trim_ascii(),
         }
-    }
-
-    /// ```
-    /// # use embedded_xml::AttributeReader;
-    /// let mut split = r#"item foo="bar" baz='qux'"#.split_ascii_whitespace();
-    /// let name = split.next().unwrap();
-    /// assert_eq!(name, "item");
-    /// let mut reader = AttributeReader::from_split(split);
-    /// assert_eq!(reader.next(), Some(("foo", "bar")));
-    /// assert_eq!(reader.next(), Some(("baz", "qux")));
-    /// assert_eq!(reader.next(), None);
-    /// ```
-    pub fn from_split(split: core::str::SplitAsciiWhitespace<'_>) -> AttributeReader<'_> {
-        AttributeReader { split }
     }
 
     /// Case-insensitive search by attribute name. Returns the value or None.
@@ -81,10 +65,47 @@ impl<'a> Iterator for AttributeReader<'a> {
     type Item = (&'a str, &'a str);
 
     fn next(&mut self) -> Option<Self::Item> {
-        let part = self.split.next()?;
-        let mut iter = part.splitn(2, '=');
-        let name = iter.next()?;
-        let value = iter.next()?.trim_matches('"').trim_matches('\'');
-        Some((name, value))
+        let s = self.remaining.trim_ascii_start();
+        if s.is_empty() {
+            return None;
+        }
+        let eq_pos = s.find('=')?;
+        let name = &s[..eq_pos];
+        let after_eq = &s[eq_pos + 1..];
+        let quote = *after_eq.as_bytes().first()?;
+        if quote == b'"' || quote == b'\'' {
+            let value_start = &after_eq[1..];
+            let end_pos = value_start.find(quote as char)?;
+            let value = &value_start[..end_pos];
+            self.remaining = &value_start[end_pos + 1..];
+            Some((name, value))
+        } else {
+            let end_pos = after_eq
+                .find(|c: char| c.is_ascii_whitespace())
+                .unwrap_or(after_eq.len());
+            let value = &after_eq[..end_pos];
+            self.remaining = &after_eq[end_pos..];
+            Some((name, value))
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn basic() {
+        let mut reader = AttributeReader::from_block(r#"foo="bar" baz='qux'"#);
+        assert_eq!(reader.next(), Some(("foo", "bar")));
+        assert_eq!(reader.next(), Some(("baz", "qux")));
+        assert_eq!(reader.next(), None);
+    }
+
+    #[test]
+    fn whitespace() {
+        let mut reader = AttributeReader::from_block(r#"style="text-align: center""#);
+        assert_eq!(reader.next(), Some(("style", "text-align: center")));
+        assert_eq!(reader.next(), None);
     }
 }
