@@ -167,7 +167,13 @@ fn hyphenate<'a>(
     options: Options,
     style: font::FontStyle,
 ) -> Option<(&'a str, u16)> {
-    if word.len() < 5 {
+    let prefix_byte_len = word.find(|c: char| c.is_alphanumeric())?;
+    let main = if let Some(end) = word.rfind(|c: char| c.is_alphanumeric()) {
+        &word[prefix_byte_len..=end]
+    } else {
+        &word[prefix_byte_len..]
+    };
+    if main.len() < 5 {
         return None;
     }
 
@@ -180,7 +186,7 @@ fn hyphenate<'a>(
 
     let font = options.font.definition(style);
     let mut length = 0;
-    for part in hypher::hyphenate(word, options.language) {
+    for part in hypher::hyphenate(main, options.language) {
         let part_width = font.word_width(part);
         if part_width > space {
             if length == 0 {
@@ -192,7 +198,7 @@ fn hyphenate<'a>(
                 x += options.space_width;
             }
 
-            let text = &word[0..length];
+            let text = &word[0..length + prefix_byte_len];
             let text = if text.chars().last() != Some('-') {
                 text
             } else {
@@ -201,7 +207,9 @@ fn hyphenate<'a>(
             };
             current_line.hyphenated = true;
             current_line.words.push(Text { text, x, style });
-            return Some((&word[length..], space));
+            let remaining = &word[length + prefix_byte_len..];
+            log::info!("Hyphenating word '{word}' from '{main}' into '{text}' and '{remaining}'");
+            return Some((remaining, space));
         }
 
         length += part.len();
