@@ -1,100 +1,219 @@
 use core::ops::Add;
-use alloc::{collections::btree_map::BTreeMap, string::{String, ToString}};
+
+use alloc::{
+    string::String,
+    vec::Vec,
+};
 
 use crate::layout;
 
-
 pub struct Stylesheet {
-    rules: BTreeMap<String, Rule>,
+    rules: Vec<(Selector, Rule)>,
+}
+
+#[derive(Clone)]
+struct Selector {
+    element: Option<String>,
+    id: Option<String>,
+    classes: Vec<String>,
+}
+
+impl Selector {
+    /// Parse a single simple or compound selector such as `p`, `.intro`,
+    /// `#main`, `p.intro`, or `h1#title.highlight`.
+    ///
+    /// Returns `None` for selectors that contain combinators (whitespace,
+    /// `>`, `+`, `~`), pseudo-classes/elements, or attribute selectors –
+    /// those are intentionally ignored.
+    fn parse(s: &str) -> Option<Self> {
+        let s = s.trim();
+        if s.is_empty()
+            || s.contains(|c: char| {
+                c.is_whitespace() || c == '>' || c == '+' || c == '~' || c == ':' || c == '['
+            })
+        {
+            return None;
+        }
+
+        let mut element = None;
+        let mut id = None;
+        let mut classes = Vec::new();
+
+        let mut current = String::new();
+        let mut kind = 'e'; // 'e' = element, '.' = class, '#' = id
+
+        for ch in s.chars() {
+            match ch {
+                '.' | '#' => {
+                    let part = core::mem::take(&mut current);
+                    if !part.is_empty() {
+                        match kind {
+                            'e' => element = Some(part),
+                            '.' => classes.push(part),
+                            '#' => id = Some(part),
+                            _ => {}
+                        }
+                    }
+                    kind = ch;
+                }
+                _ => current.push(ch),
+            }
+        }
+
+        if !current.is_empty() {
+            match kind {
+                'e' => element = Some(current),
+                '.' => classes.push(current),
+                '#' => id = Some(current),
+                _ => {}
+            }
+        }
+
+        if element.is_none() && id.is_none() && classes.is_empty() {
+            return None;
+        }
+
+        Some(Self {
+            element,
+            id,
+            classes,
+        })
+    }
+
+    fn matches(&self, element: &str, id: Option<&str>, classes: &[&str]) -> bool {
+        if let Some(ref el) = self.element {
+            if el != element {
+                return false;
+            }
+        }
+        if let Some(ref sel_id) = self.id {
+            match id {
+                Some(el_id) if el_id == sel_id.as_str() => {}
+                _ => return false,
+            }
+        }
+        self.classes.iter().all(|c| classes.contains(&c.as_str()))
+    }
+
+    /// Specificity as `(ids, classes, elements)`.
+    fn specificity(&self) -> (u8, u8, u8) {
+        (
+            self.id.is_some() as u8,
+            self.classes.len() as u8,
+            self.element.is_some() as u8,
+        )
+    }
 }
 
 impl Stylesheet {
     pub fn new() -> Self {
-        Self {
-            rules: BTreeMap::new(),
-        }
+        Self { rules: Vec::new() }
     }
 
-    pub fn get(&self, class: &str) -> Rule {
-        class.split_whitespace()
-            .filter_map(|c| self.rules.get(c))
-            .fold(Rule::default(), |acc, rule| acc + rule.clone())
-    }
+    /// Look up the cascaded rule for an element given its tag name, optional
+    /// `id` attribute, and optional `class` attribute (space-separated list).
+    pub fn get(&self, element: &str, id: Option<&str>, class: Option<&str>) -> Rule {
+        let classes: Vec<&str> = class
+            .map(|c| c.split_whitespace().collect())
+            .unwrap_or_default();
 
-    pub fn insert(&mut self, class: String, rule: Rule) {
-        self.rules.insert(class, rule);
+        let mut matches: Vec<((u8, u8, u8), usize, &Rule)> = self
+            .rules
+            .iter()
+            .enumerate()
+            .filter(|(_, (sel, _))| sel.matches(element, id, &classes))
+            .map(|(i, (sel, rule))| (sel.specificity(), i, rule))
+            .collect();
+
+        // Lower specificity / earlier source order applied first so that
+        // higher-specificity rules override.
+        matches.sort_by_key(|&(spec, idx, _)| (spec, idx));
+
+        matches
+            .into_iter()
+            .fold(Rule::default(), |acc, (_, _, rule)| acc + *rule)
     }
 
     pub fn extend_from_sheet(&mut self, sheet: &str) {
         let sheet = Self::filter_comments(sheet);
-        
+
         let mut pos = 0;
         while pos < sheet.len() {
-            // Find next opening brace or @ symbol
             let remaining = &sheet[pos..];
             let Some(brace_pos) = remaining.find(|c| c == '{' || c == '@') else {
                 break;
             };
-            
+
             let actual_pos = pos + brace_pos;
-            
-            // Handle at-rules (skip them)
+
+            // Skip at-rules
             if sheet.as_bytes()[actual_pos] == b'@' {
-                // Find semicolon first
-                if let Some(semi_pos) = sheet[actual_pos..].find(';') {
-                    let semi_actual = actual_pos + semi_pos;
-                    // Check if there's a brace before the semicolon
-                    if let Some(brace) = sheet[actual_pos..semi_actual].find('{') {
-                        // At-rule with block, skip to closing brace
-                        if let Some(end_brace) = sheet[actual_pos + brace..].find('}') {
-                            pos = actual_pos + brace + end_brace + 1;
-                            continue;
-                        }
-                    } else {
-                        // Simple at-rule, skip to semicolon
-                        pos = semi_actual + 1;
-                        continue;
-                    }
-                } else if let Some(brace) = sheet[actual_pos..].find('{') {
-                    // At-rule with block but no semicolon
-                    if let Some(end_brace) = sheet[actual_pos + brace..].find('}') {
-                        pos = actual_pos + brace + end_brace + 1;
-                        continue;
-                    }
+                if let Some(end) = Self::skip_at_rule(&sheet, actual_pos) {
+                    pos = end;
+                    continue;
                 }
                 break;
             }
-            
-            // Extract selector
-            let selector = sheet[pos..actual_pos].trim();
-            
-            // Find closing brace
-            let Some(end_brace_pos) = sheet[actual_pos..].find('}') else {
+
+            // Find matching closing brace (handles nested blocks)
+            let Some(end_pos) = Self::find_closing_brace(&sheet, actual_pos) else {
                 break;
             };
-            let end_pos = actual_pos + end_brace_pos;
-            
-            // Extract declarations
+
+            let selector_text = sheet[pos..actual_pos].trim();
             let declarations = sheet[actual_pos + 1..end_pos].trim();
-            
-            // Only handle class selectors (starting with '.')
-            if let Some(class_name) = selector.strip_prefix('.') {
+
+            // Ignore rules whose body contains nested braces (nested rules).
+            if !declarations.contains('{') {
                 let rule = Rule::from_str(declarations);
-                // Only insert if the rule has at least one property
-                if rule.alignment.is_some() || rule.italic.is_some() 
-                    || rule.bold.is_some() || rule.indent.is_some() {
-                    self.rules.insert(class_name.to_string(), rule);
+                if rule.has_any() {
+                    // Handle grouped selectors (comma-separated).
+                    for sel_str in selector_text.split(',') {
+                        if let Some(selector) = Selector::parse(sel_str) {
+                            self.rules.push((selector, rule));
+                        }
+                    }
                 }
             }
-            
+
             pos = end_pos + 1;
         }
     }
-    
+
+    fn skip_at_rule(sheet: &str, at_pos: usize) -> Option<usize> {
+        let rest = &sheet[at_pos..];
+        let semi = rest.find(';');
+        let brace = rest.find('{');
+
+        match (semi, brace) {
+            (Some(s), Some(b)) if s < b => Some(at_pos + s + 1),
+            (_, Some(b)) => Self::find_closing_brace(sheet, at_pos + b).map(|end| end + 1),
+            (Some(s), None) => Some(at_pos + s + 1),
+            (None, None) => None,
+        }
+    }
+
+    fn find_closing_brace(sheet: &str, open_pos: usize) -> Option<usize> {
+        let mut depth: u32 = 1;
+        for (i, b) in sheet[open_pos + 1..].bytes().enumerate() {
+            match b {
+                b'{' => depth += 1,
+                b'}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return Some(open_pos + 1 + i);
+                    }
+                }
+                _ => {}
+            }
+        }
+        None
+    }
+
     fn filter_comments(sheet: &str) -> String {
         let mut result = String::new();
         let mut chars = sheet.char_indices().peekable();
-        
+
         while let Some((_, c)) = chars.next() {
             if c == '/' {
                 if let Some((_, '*')) = chars.peek() {
@@ -120,7 +239,7 @@ impl Stylesheet {
                 result.push(c);
             }
         }
-        
+
         result
     }
 }
@@ -180,6 +299,13 @@ impl Rule {
         }
 
         rule
+    }
+
+    fn has_any(&self) -> bool {
+        self.alignment.is_some()
+            || self.italic.is_some()
+            || self.bold.is_some()
+            || self.indent.is_some()
     }
 }
 

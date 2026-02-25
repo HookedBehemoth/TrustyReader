@@ -18,19 +18,23 @@ pub fn parse<R: embedded_io::Read>(
     title: Option<String>,
     reader: R,
     size: usize,
-    stylesheet: Option<&css::Stylesheet>,
+    extern_stylesheet: Option<&css::Stylesheet>,
 ) -> super::Result<Chapter> {
     // TODO: Ensure this is XHTML here or while parsing?
     let mut parser = xml::Reader::new(reader, size as _, 8096)?;
 
     let mut paragraphs = alloc::vec![];
+    let mut inline_stylesheet = css::Stylesheet::new();
 
     loop {
         let event = parser.next_event()?;
         trace!("XML event: {:?}", event);
         match event {
+            xml::Event::StartElement { name: "head", .. } => {
+                inline_stylesheet = parse_head(&mut parser)?;
+            }
             xml::Event::StartElement { name: "body", .. } => {
-                paragraphs = parse_body(&mut parser, stylesheet)?;
+                paragraphs = parse_body(&mut parser, inline_stylesheet, extern_stylesheet)?;
                 break;
             }
             xml::Event::EndOfFile => break,
@@ -41,9 +45,37 @@ pub fn parse<R: embedded_io::Read>(
     Ok(Chapter { title, paragraphs })
 }
 
+fn parse_head<R: embedded_io::Read>(
+    reader: &mut xml::OwnedReader<R>,
+) -> super::Result<css::Stylesheet> {
+    let mut stylesheet = css::Stylesheet::new();
+
+    loop {
+        let event = reader.next_event()?;
+        trace!("XML event: {:?}", event);
+        match event {
+            xml::Event::EndElement { name: "head" } => break,
+            xml::Event::StartElement { name: "style", attrs } => {
+                if attrs.get("type") != Some("text/css") {
+                    continue;
+                }
+                let xml::Event::Text { content } = reader.next_event()? else {
+                    continue;
+                };
+                stylesheet.extend_from_sheet(&content);
+            }
+            xml::Event::EndOfFile => break,
+            _ => {}
+        }
+    }
+
+    Ok(stylesheet)
+}
+
 fn parse_body<R: embedded_io::Read>(
     reader: &mut xml::OwnedReader<R>,
-    stylesheet: Option<&css::Stylesheet>,
+    inline_stylesheet: css::Stylesheet,
+    extern_stylesheet: Option<&css::Stylesheet>,
 ) -> super::Result<Vec<Paragraph>> {
     let mut parser = BodyParser::new();
 
@@ -72,13 +104,16 @@ fn parse_body<R: embedded_io::Read>(
 
                 parser.increase_depth();
 
+                let id = attrs.get("id");
                 let class = attrs.get("class");
-                let style = stylesheet
-                    .and_then(|s| class.map(|c| s.get(c)))
-                    .unwrap_or_default()
-                    + attrs
-                        .get("style")
-                        .map(css::Rule::from_str)
+                let inline_style = attrs
+                    .get("style")
+                    .map(css::Rule::from_str)
+                    .unwrap_or_default();
+                let style = inline_style
+                    + inline_stylesheet.get(name, id, class)
+                    + extern_stylesheet
+                        .map(|s| s.get(name, id, class))
                         .unwrap_or_default();
 
                 if is_bold(name) {
@@ -109,9 +144,9 @@ fn parse_body<R: embedded_io::Read>(
                     parser.flush_run();
                 }
 
-                if is_bold(name) {
+                if parser.bold_depth == None && is_bold(name) {
                     parser.set_bold(false);
-                } else if is_italic(name) {
+                } else if parser.italic_depth == None && is_italic(name) {
                     parser.set_italic(false);
                 }
 
@@ -268,6 +303,7 @@ impl BodyParser {
     }
 }
 
+#[rustfmt::skip]
 #[cfg(test)]
 mod test {
     use alloc::string::ToString;
