@@ -549,16 +549,12 @@ impl<Filesystem: crate::fs::Filesystem> super::Activity for ReaderActivity<Files
 
         let buttons = &state.input;
 
-        if buttons.is_pressed(Buttons::Up) {
+        if buttons.is_pressed(Buttons::Up) || buttons.is_pressed(Buttons::Right){
             self.prev_page(state.rotation.size());
             super::UpdateResult::Redraw
-        } else if buttons.is_pressed(Buttons::Down) {
+        } else if buttons.is_pressed(Buttons::Down) || buttons.is_pressed(Buttons::Left) {
             self.next_page(state.rotation.size());
             super::UpdateResult::Redraw
-        } else if buttons.is_pressed(Buttons::Left) {
-            super::UpdateResult::None
-        } else if buttons.is_pressed(Buttons::Right) {
-            super::UpdateResult::None
         } else if buttons.is_pressed(Buttons::Confirm) {
             self.show_settings = !self.show_settings;
             super::UpdateResult::Redraw

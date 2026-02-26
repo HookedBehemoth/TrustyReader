@@ -74,10 +74,12 @@ where
             return;
         }
 
+        let rotation = self.display_buffers.rotation();
+        let input = buttons.translated(rotation);
         let state = ApplicationState {
-            input: *buttons,
+            input,
             charge,
-            rotation: self.display_buffers.rotation(),
+            rotation,
         };
 
         match self.activity.update(&state) {
