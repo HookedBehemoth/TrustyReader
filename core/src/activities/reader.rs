@@ -510,7 +510,8 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
                     hypher::Lang::English => hypher::Lang::French,
                     hypher::Lang::French => hypher::Lang::German,
                     hypher::Lang::German => hypher::Lang::Spanish,
-                    hypher::Lang::Spanish => hypher::Lang::English,
+                    hypher::Lang::Spanish => hypher::Lang::Italian,
+                    hypher::Lang::Italian => hypher::Lang::English,
                     _ => self.language, // Don't cycle unsupported languages
                 },
                 5 => self.debug_width = !self.debug_width,
