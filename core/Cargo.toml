@@ -15,3 +15,4 @@ strum = { version = "0.27.2", default-features = false, features = ["strum_macro
 strum_macros = "0.27.2"
 rotate-enum = "0.1.2"
 embedded-xml.workspace = true
+html-escape = { version = "0.2.13", default-features = false }

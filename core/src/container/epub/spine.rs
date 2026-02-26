@@ -271,7 +271,7 @@ impl BodyParser {
                 if !acc.is_empty() {
                     acc.push(' ');
                 }
-                acc.push_str(word);
+                acc.push_str(html_escape::decode_html_entities(word).as_ref());
                 acc
             });
         self.current_run.push_str(&text);
@@ -353,5 +353,22 @@ mod test {
         assert_eq!(paragraph.runs.len(), 1);
         let run = &paragraph.runs[0];
         assert_eq!(run.text, "Text with White space before and afterSpans");
+    }
+
+    #[test]
+    fn test_amp_escape() {
+        let body = r#"
+        <?xml version="1.0" encoding="utf-8"?>
+        <html xmlns="http://www.w3.org/1999/xhtml">
+            <body>
+                <p>We support &quot;&amp;amp;&quot; escaping now!!!</p>
+            </body>
+        </html>"#;
+        let chapter = super::parse(None, body.as_bytes(), body.len(), None).unwrap();
+        assert_eq!(chapter.paragraphs.len(), 1);
+        let paragraph = &chapter.paragraphs[0];
+        assert_eq!(paragraph.runs.len(), 1);
+        let run = &paragraph.runs[0];
+        assert_eq!(run.text, "We support \"&amp;\" escaping now!!!");
     }
 }
