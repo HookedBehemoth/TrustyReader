@@ -35,24 +35,28 @@ enum BlitMode {
 
 impl Default for MinifbDisplay {
     fn default() -> Self {
+        Self::new(Rotation::Rotate90, minifb::Scale::X2)
+    }
+}
+
+impl MinifbDisplay {
+    pub fn new(rotation: Rotation, scale: minifb::Scale) -> Self {
         let mut ret = Self {
             is_grayscale: false,
             lsb_buffer: Box::new([0; BUFFER_SIZE]),
             msb_buffer: Box::new([0; BUFFER_SIZE]),
             display_buffer: Box::new([0; DISPLAY_BUFFER_SIZE]),
-            window: Self::create_window(Rotation::Rotate0, minifb::Scale::X2),
+            window: Self::create_window(rotation, scale),
             buttons: ButtonState::default(),
-            internal_rotation: Rotation::Rotate0,
-            scale: minifb::Scale::X2,
+            internal_rotation: rotation,
+            scale,
         };
 
         ret.display_buffer.fill(0xFFFFFFFF);
 
         ret
     }
-}
 
-impl MinifbDisplay {
     fn create_window(rotation: Rotation, scale: minifb::Scale) -> minifb::Window {
         let (width, height) = match rotation {
             Rotation::Rotate0 | Rotation::Rotate180 => (WIDTH, HEIGHT),
