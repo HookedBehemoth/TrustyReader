@@ -27,12 +27,13 @@ pub const STA_PROTECT: DSTATUS = 0x04; /* Write protected */
 
 pub const SECTOR_SIZE: usize = 512;
 
-pub type DRESULT = u32;
+pub type DRESULT = i32;
 pub const DRESULT_RES_OK: DRESULT = 0;
 pub const DRESULT_RES_ERROR: DRESULT = 1;
 pub const DRESULT_RES_WRPRT: DRESULT = 2;
 pub const DRESULT_RES_NOTRDY: DRESULT = 3;
 pub const DRESULT_RES_PARERR: DRESULT = 4;
+pub const DRESULT_RES_EXIST: DRESULT = 8;
 
 /* Generic command (Used by FatFs) */
 const CTRL_SYNC: BYTE = 0; /* Complete pending write process (needed at FF_FS_READONLY == 0) */
@@ -164,14 +165,48 @@ pub unsafe extern "C" fn disk_write(
             DRESULT_RES_NOTRDY
         }
     }
-    // DRESULT_RES_NOTRDY
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn disk_ioctl(_lun: BYTE, _cmd: BYTE, _buff: *mut c_void) -> DRESULT {
-    // 0
     trace!("disk_ioctl called");
-    DRESULT_RES_NOTRDY
+    unsafe {
+        if let Some(driver) = &*core::ptr::addr_of!(DRIVER) {
+            match _cmd {
+                CTRL_SYNC => {
+                    // No cache to flush; treat as OK.
+                    DRESULT_RES_OK
+                }
+                GET_SECTOR_COUNT => {
+                    if !_buff.is_null() {
+                        if let Ok(bytes) = driver.num_bytes() {
+                            let sectors = (bytes as u64 / SECTOR_SIZE as u64) as DWORD;
+                            *(_buff as *mut DWORD) = sectors;
+                            return DRESULT_RES_OK;
+                        }
+                    }
+                    DRESULT_RES_ERROR
+                }
+                GET_SECTOR_SIZE => {
+                    if !_buff.is_null() {
+                        *(_buff as *mut WORD) = SECTOR_SIZE as WORD;
+                        return DRESULT_RES_OK;
+                    }
+                    DRESULT_RES_ERROR
+                }
+                GET_BLOCK_SIZE => {
+                    if !_buff.is_null() {
+                        *(_buff as *mut DWORD) = 1;
+                        return DRESULT_RES_OK;
+                    }
+                    DRESULT_RES_ERROR
+                }
+                _ => DRESULT_RES_PARERR,
+            }
+        } else {
+            DRESULT_RES_NOTRDY
+        }
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -337,16 +372,18 @@ impl Filesystem for FatFs {
         path: &str,
         mode: trusty_core::fs::Mode,
     ) -> Result<Self::File, Self::Error> {
-        let path = null_terminate(path);
         let mode = match mode {
             Mode::Read => FA_READ | FA_OPEN_EXISTING,
             Mode::Write => FA_WRITE | FA_CREATE_ALWAYS,
             Mode::ReadWrite => FA_READ | FA_WRITE | FA_OPEN_ALWAYS,
         };
+        log::trace!("Opening file: {}, mode: {:?}", path, mode as u8);
+        let path = null_terminate(path);
         unsafe {
             let mut f: FIL = core::mem::zeroed();
             let res = f_open(&mut f as *mut FIL, path.as_ptr(), mode);
-            if res.0 != 0 {
+            log::trace!("f_open result: {:?}", res);
+            if res.0 != DRESULT_RES_OK {
                 Err(res)
             } else {
                 Ok(FileEntry { f })
@@ -354,9 +391,27 @@ impl Filesystem for FatFs {
         }
     }
     fn create_dir_all(&self, path: &str) -> Result<(), Self::Error> {
-        let path = null_terminate(path);
-        let res = unsafe { f_mkdir(path.as_ptr()) };
-        if res.0 != 0 { Err(res) } else { Ok(()) }
+        log::trace!("Creating directory and parents for path: {}", path);
+        let mut tmp_path = [0u8; 256];
+        let mut offset = 0;
+        for part in path.split('/') {
+            if part.is_empty() {
+                continue;
+            }
+            let part_bytes = part.as_bytes();
+            if offset + part_bytes.len() + 1 >= tmp_path.len() {
+                return Err(FRESULT(DRESULT_RES_PARERR));
+            }
+            let end = offset + part_bytes.len();
+            tmp_path[offset..end].copy_from_slice(part_bytes);
+            tmp_path[end] = 0;
+            let res = unsafe { f_mkdir(tmp_path.as_ptr()) };
+            log::trace!("f_mkdir result: {:?}", res);
+            if res.0 != DRESULT_RES_OK && res.0 != DRESULT_RES_EXIST { return Err(res) }
+            tmp_path[end] = b'/';
+            offset = end + 1;
+        }
+        Ok(())
     }
     fn exists(&self, path: &str) -> Result<bool, Self::Error> {
         let path = null_terminate(path);
@@ -478,6 +533,15 @@ impl trusty_core::fs::Directory for DirectoryEntry {
 
 pub struct FileEntry {
     f: FIL,
+}
+
+impl Drop for FileEntry {
+    fn drop(&mut self) {
+        log::trace!("Closing file");
+        unsafe {
+            f_close(&mut self.f as *mut FIL);
+        }
+    }
 }
 
 impl ErrorType for FileEntry {
