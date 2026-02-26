@@ -179,19 +179,21 @@ fn hyphenate<'a>(
     style: font::FontStyle,
 ) -> Option<(&'a str, u16)> {
     let (prefix_byte_len, main) = trim_to_alphanumeric(word)?;
-    log::info!("Hyphenating word '{word}' with main part '{main}'");
     if main.len() < 5 {
         return None;
     }
 
+    let font = options.font.definition(style);
     let space_width = options.space_width;
     let dash_width = options.dash_width;
     let mut space = options.width.saturating_sub(x + space_width + dash_width);
+    if prefix_byte_len > 0 {
+        space = space.saturating_sub(font.word_width(&word[0..prefix_byte_len]));
+    }
     if space == 0 {
         return None;
     }
 
-    let font = options.font.definition(style);
     let mut length = 0;
     for part in hypher::hyphenate(main, options.language) {
         let part_width = font.word_width(part);
@@ -215,7 +217,7 @@ fn hyphenate<'a>(
             current_line.hyphenated = true;
             current_line.words.push(Text { text, x, style });
             let remaining = &word[length + prefix_byte_len..];
-            log::info!("Hyphenating word '{word}' from '{main}' into '{text}' and '{remaining}'");
+            log::trace!("Hyphenating word '{word}' from '{main}' into '{text}' and '{remaining}'");
             return Some((remaining, space));
         }
 
