@@ -159,6 +159,17 @@ pub fn layout_text<'a>(
     lines
 }
 
+/// Trims non-alphanumeric prefix and suffix 
+fn trim_to_alphanumeric(word: &str) -> Option<(usize, &str)> {
+    let prefix = word.find(|c: char| c.is_alphanumeric())?;
+    let main = if let Some((end, ch)) = word.char_indices().rfind(|(_, c)| c.is_alphanumeric()) {
+        &word[prefix..end + ch.len_utf8()]
+    } else {
+        &word[prefix..]
+    };
+    Some((prefix, main))
+}
+
 /// Greedily hyphenate the given word to fit in the remaining space.
 fn hyphenate<'a>(
     mut x: u16,
@@ -167,12 +178,8 @@ fn hyphenate<'a>(
     options: Options,
     style: font::FontStyle,
 ) -> Option<(&'a str, u16)> {
-    let prefix_byte_len = word.find(|c: char| c.is_alphanumeric())?;
-    let main = if let Some(end) = word.rfind(|c: char| c.is_alphanumeric()) {
-        &word[prefix_byte_len..=end]
-    } else {
-        &word[prefix_byte_len..]
-    };
+    let (prefix_byte_len, main) = trim_to_alphanumeric(word)?;
+    log::info!("Hyphenating word '{word}' with main part '{main}'");
     if main.len() < 5 {
         return None;
     }
@@ -260,5 +267,16 @@ fn align(alignment: Alignment, space: u16, words: &mut [Text]) {
         Alignment::Start => { }
         Alignment::Justify => justify(space, words),
         _ => nudge(alignment, space, words),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_trim() {
+        use super::trim_to_alphanumeric as trim;
+        assert_eq!(trim(r#""hello""#), Some((1, "hello")));
+        assert_eq!(trim(r#"":;;'""#), None);
+        assert_eq!(trim(r#"ließ"#), Some((0, "ließ")));
     }
 }
