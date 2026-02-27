@@ -1,8 +1,9 @@
 use std::{collections::HashMap, env::args, path::PathBuf};
 
 use log::{error, info, trace};
-use trusty_core::{fs::Filesystem, zip};
+use trusty_core::fs::Filesystem;
 use embedded_xml as xml;
+use embedded_zip as zip;
 
 use crate::std_fs::StdFilesystem;
 

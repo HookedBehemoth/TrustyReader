@@ -1,8 +1,7 @@
 use trusty_core::activities::ActivityType;
 use trusty_core::battery::ChargeState;
 use trusty_core::framebuffer;
-use trusty_core::fs::Filesystem;
-use trusty_core::{application::Application, framebuffer::DisplayBuffers, zip};
+use trusty_core::{application::Application, framebuffer::DisplayBuffers};
 
 use crate::minifb_display::MinifbDisplay;
 use crate::std_fs::StdFilesystem;
@@ -67,19 +66,5 @@ fn main() {
         display.update();
         application.update(&display.get_buttons(), charge);
         application.draw(&mut display);
-    }
-
-    if false {
-        let fs = StdFilesystem::new_with_base_path("sd".into());
-        let mut reader = fs
-            .open_file("ohler.epub", trusty_core::fs::Mode::Read)
-            .unwrap();
-        let entries = zip::parse_zip(&mut reader).unwrap();
-        for entry in &entries {
-            log::info!("Found zip entry: {} (sz: {})", entry.name, entry.size);
-            let reader = zip::ZipEntryReader::new(&mut reader, entry).unwrap();
-            let contents = reader.read_to_end().unwrap();
-            log::info!("  Entry data size: {}", contents.len());
-        }
     }
 }

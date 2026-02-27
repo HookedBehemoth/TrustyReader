@@ -5,8 +5,9 @@ rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
+embedded-xml.workspace = true
+embedded-zip.workspace = true
 embedded-graphics.workspace = true
-miniz_oxide = { version = "0.9.0", default-features = false }
 embedded-io.workspace = true
 log.workspace = true
 hypher = { version = "0.1.6", default-features = false, features = [
@@ -17,5 +18,4 @@ heapless = "0.9.2"
 strum = { version = "0.27.2", default-features = false, features = ["strum_macros"] }
 strum_macros = "0.27.2"
 rotate-enum = "0.1.2"
-embedded-xml.workspace = true
 html-escape = { version = "0.2.13", default-features = false }

@@ -17,6 +17,8 @@ name = "xmltest"
 path = "src/xmltest.rs"
 
 [dependencies]
+embedded-xml.workspace = true
+embedded-zip.workspace = true
 trusty-core = { path = "../core" }
 env_logger = "0.11.8"
 log.workspace = true
@@ -26,4 +28,3 @@ embedded-io = { workspace = true, features = ["std"] }
 argh = "0.1.13"
 image = { version = "0.25.9", features = ["png", "jpeg", "bmp", "webp"], default-features = false }
 fontdue = "0.9.3"
-embedded-xml.workspace = true

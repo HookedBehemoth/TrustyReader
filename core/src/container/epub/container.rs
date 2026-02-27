@@ -4,7 +4,7 @@ use log::{info, trace};
 
 use embedded_xml as xml;
 use crate::fs::File;
-use crate::zip::{ZipEntryReader, ZipFileEntry};
+use zip::{ZipEntryReader, ZipFileEntry};
 
 use super::Result;
 use super::error::{EpubError, RequiredFileTypes};

@@ -1,4 +1,4 @@
-use crate::zip::ZipError;
+use zip::ZipError;
 
 use embedded_xml as xml;
 
