@@ -14,6 +14,7 @@ embedded-io.workspace = true
 log = { workspace = true, optional = true }
 miniz_oxide = { version = "0.9.0", default-features = false }
 zerocopy = { version = "0.8.40", features = ["derive"] }
+memchr = { version = "2.8.0", default-features = false }
 
 [features]
 log = ["dep:log"]

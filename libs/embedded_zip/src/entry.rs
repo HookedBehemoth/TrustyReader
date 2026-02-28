@@ -17,7 +17,7 @@ pub struct ZipFileEntry {
 #[repr(C, packed)]
 #[derive(zerocopy::FromBytes)]
 struct LocalFileHeader {
-    signature: u32,
+    signature: [u8; 4],
     version_needed: u16,
     flags: u16,
     compression: u16,
@@ -29,6 +29,9 @@ struct LocalFileHeader {
     filename_len: u16,
     extra_len: u16,
 }
+const LOCAL_FILE_HEADER_MAGIC: [u8; 4] = [0x50, 0x4b, 0x03, 0x04];
+const COMPRESSION_STORED: u16 = 0;
+const COMPRESSION_DEFLATE: u16 = 8;
 
 /// A streaming reader for a single zip entry.
 /// Supports both stored (uncompressed) and deflate-compressed entries.
@@ -60,26 +63,24 @@ impl<'a, R: Read + Seek> ZipEntryReader<'a, R> {
             .map_err(ZipError::from_read_exact_error)?;
         let lfh = LocalFileHeader::read_from_bytes(&lfh_bytes).unwrap();
 
-        if lfh.signature != 0x04034b50 {
+        if lfh.signature != LOCAL_FILE_HEADER_MAGIC {
             return Err(ZipError::InvalidSignature);
         }
 
         // Skip filename and extra field
+        let offset = lfh.filename_len + lfh.extra_len;
         reader
-            .seek(SeekFrom::Current(lfh.filename_len as _))
-            .map_err(ZipError::from_io_error)?;
-        reader
-            .seek(SeekFrom::Current(lfh.extra_len as _))
+            .seek(SeekFrom::Current(offset as _))
             .map_err(ZipError::from_io_error)?;
 
         let compression = lfh.compression;
 
         // Only support stored (0) and deflate (8)
-        if compression != 0 && compression != 8 {
+        if compression != COMPRESSION_STORED && compression != COMPRESSION_DEFLATE {
             return Err(ZipError::UnsupportedCompression);
         }
 
-        let inflater = if compression == 8 {
+        let inflater = if compression == COMPRESSION_DEFLATE {
             Some(Box::new(inflate::stream::InflateState::new(
                 DataFormat::Raw,
             )))

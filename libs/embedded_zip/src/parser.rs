@@ -1,6 +1,7 @@
 use crate::{ZipError, ZipFileEntry};
 use alloc::{boxed::Box, string::String, vec, vec::Vec};
 use embedded_io::{Read, Seek, SeekFrom};
+use memchr::memmem;
 use zerocopy::FromBytes;
 
 pub fn parse_zip<Reader>(reader: &mut Reader) -> Result<Box<[ZipFileEntry]>, ZipError>
@@ -14,7 +15,7 @@ where
 #[repr(C, packed)]
 #[derive(zerocopy::FromBytes)]
 struct EndCentralDir {
-    signature: u32,
+    signature: [u8; 4],
     disk_number: u16,
     central_dir_start_disk: u16,
     num_entries_this_disk: u16,
@@ -23,11 +24,12 @@ struct EndCentralDir {
     central_dir_offset: u32,
     comment_length: u16,
 }
+const END_CENTRAL_DIR_MAGIC: [u8; 4] = [0x50, 0x4b, 0x05, 0x06];
 
 #[repr(C, packed)]
 #[derive(zerocopy::FromBytes)]
 struct CentralDirEntry {
-    signature: u32,
+    signature: [u8; 4],
     version_made: u16,
     version_needed: u16,
     flags: u16,
@@ -45,6 +47,7 @@ struct CentralDirEntry {
     external_attr: u32,
     pub local_header_offset: u32,
 }
+const CENTRAL_DIR_ENTRY_MAGIC: [u8; 4] = [0x50, 0x4b, 0x01, 0x02];
 
 fn find_end_central_directory<Reader>(reader: &mut Reader) -> Result<EndCentralDir, ZipError>
 where
@@ -56,17 +59,13 @@ where
     reader
         .seek(SeekFrom::End(-seek_start))
         .map_err(ZipError::from_io_error)?;
-    let read = reader.read(&mut buf).map_err(ZipError::from_io_error)?;
+    reader.read_exact(&mut buf).map_err(ZipError::from_read_exact_error)?;
 
-    for i in (0..read - 4).rev() {
-        if buf[i..i + 4] != [0x50, 0x4b, 0x05, 0x06] {
-            continue;
-        }
-        let sz = core::mem::size_of::<EndCentralDir>();
-        return Ok(EndCentralDir::read_from_bytes(&buf[i..i + sz]).unwrap());
-    }
-
-    Err(ZipError::InvalidData)
+    let sz = core::mem::size_of::<EndCentralDir>();
+    let Some(idx) = memmem::rfind(&buf[..buf.len() - sz + 4], &END_CENTRAL_DIR_MAGIC) else {
+        return Err(ZipError::InvalidData);
+    };
+    Ok(EndCentralDir::read_from_bytes(&buf[idx..idx + sz]).unwrap())
 }
 
 fn read_central_directory<Reader>(
@@ -91,7 +90,7 @@ where
             .read_exact(&mut cde_buf)
             .map_err(ZipError::from_read_exact_error)?;
         let cde = CentralDirEntry::read_from_bytes(&cde_buf).unwrap();
-        if cde.signature != 0x02014b50 {
+        if cde.signature != CENTRAL_DIR_ENTRY_MAGIC {
             return Err(ZipError::InvalidSignature);
         }
 
