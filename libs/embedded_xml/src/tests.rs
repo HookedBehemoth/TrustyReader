@@ -20,7 +20,7 @@ fn walk(xml: &str) {
     let mut element_stack = Vec::<String>::new();
     loop {
         match parser.next_event().unwrap() {
-            Event::Declaration { attrs } => {
+            Event::ProcessingInstruction { name: "xml",  attrs } => {
                 trace!("--Declaration");
                 assert_eq!(attrs.get("version"), Some("1.0"));
                 assert!(
@@ -104,7 +104,7 @@ fn full_tree() {
     let mut data = &xml[..];
     let mut buffer = [0u8; 512];
     let mut parser = Reader::new_borrowed(&mut data, xml.len(), &mut buffer).unwrap();
-    let Declaration { attrs } = parser.next_event().unwrap() else {
+    let ProcessingInstruction { name: "xml", attrs } = parser.next_event().unwrap() else {
         panic!("Expected declaration");
     };
     assert_eq!(attrs.get("version"), Some("1.0"));
@@ -142,14 +142,14 @@ fn invalid_doc() {
     let mut bytes = xml.as_bytes();
     let mut buffer = [0u8; 512];
     let mut parser = Reader::new_borrowed(&mut bytes, xml.len(), &mut buffer).unwrap();
-    assert_matches!(parser.next_event(), Err(crate::Error::Eof));
+    assert_matches!(parser.next_event(), Ok(Event::EndOfFile));
 
     // we don't care about unclosed elements.
     let xml = "<?xml?><unclosed><child>Text</child>";
     let mut bytes = xml.as_bytes();
     let mut buffer = [0u8; 512];
     let mut parser = Reader::new_borrowed(&mut bytes, xml.len(), &mut buffer).unwrap();
-    assert_matches!(parser.next_event(), Ok(Event::Declaration { .. }));
+    assert_matches!(parser.next_event(), Ok(Event::ProcessingInstruction { name: "xml", .. }));
     assert_matches!(parser.next_event(), Ok(Event::StartElement { name: "unclosed", .. }));
     assert_matches!(parser.next_event(), Ok(Event::StartElement { name: "child", .. }));
     assert_matches!(parser.next_event(), Ok(Event::Text { content: "Text" }));
@@ -163,7 +163,7 @@ fn non_owning() {
     let mut bytes = xml.as_bytes();
     let mut buffer = [0u8; 5];
     let mut parser = Reader::new_borrowed(&mut bytes, xml.len(), &mut buffer).unwrap();
-    assert_matches!(parser.next_event(), Ok(Event::Declaration { .. }));
+    assert_matches!(parser.next_event(), Ok(Event::ProcessingInstruction { name: "xml", .. }));
     assert_matches!(parser.next_event(), Ok(Event::StartElement { name: "root", .. }));
     assert_matches!(parser.next_event(), Ok(Event::Text { content: "Text" }));
     assert_matches!(parser.next_event(), Ok(Event::EndElement { name: "root" }));

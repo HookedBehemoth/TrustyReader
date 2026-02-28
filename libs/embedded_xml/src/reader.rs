@@ -26,7 +26,6 @@ pub struct Reader<R, Buffer> {
     buffer: Buffer,
     pos: usize,
     end: usize,
-    at_start: bool,
     self_closing: Option<Range<usize>>,
 }
 
@@ -77,7 +76,6 @@ impl<R: embedded_io::Read, Buffer: AsRef<[u8]> + AsMut<[u8]>> Reader<R, Buffer> 
             buffer,
             pos: 0,
             end,
-            at_start: true,
             self_closing: None,
         })
     }
@@ -94,7 +92,7 @@ impl<R: embedded_io::Read, Buffer: AsRef<[u8]> + AsMut<[u8]>> Reader<R, Buffer> 
     /// # let mut reader = xml::Reader::new_borrowed(&mut reader, xml.len(), &mut buffer)?;
     /// loop {
     ///     match reader.next_event()? {
-    ///         xml::Event::Declaration { mut attrs } => {
+    ///         xml::Event::ProcessingInstruction { name: "xml", mut attrs } => {
     ///             assert_eq!(attrs.get("version"), Some("1.0"));
     ///         }
     ///         xml::Event::StartElement { name: "item", mut attrs } => {
@@ -113,17 +111,6 @@ impl<R: embedded_io::Read, Buffer: AsRef<[u8]> + AsMut<[u8]>> Reader<R, Buffer> 
     /// # }
     /// ```
     pub fn next_event(&mut self) -> Result<Event<'_>> {
-        // Ensure we have an XML declaration at the start of the document
-        // We should probably ensure version 1.0 and UTF-8 encoding.
-        if self.at_start {
-            self.at_start = false;
-            let (start, end) = self.try_find("<?xml", "?>")?;
-            let block = core::str::from_utf8(&self.buffer.as_ref()[start..end])?;
-            let attrs = AttributeReader::from_block(block);
-            self.pos = end + 2;
-            return Ok(Event::Declaration { attrs });
-        };
-
         if self.pos == self.end && self.remaining == 0 {
             trace!("Pos = End");
             return Ok(Event::EndOfFile);
