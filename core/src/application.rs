@@ -26,7 +26,7 @@ pub struct Application<'a, Filesystem> {
     display_buffers: &'a mut DisplayBuffers,
     filesystem: Filesystem,
     stack: heapless::Vec<ActivityType, 8>,
-    activity: Box<dyn Activity>,
+    activity: Option<Box<dyn Activity>>,
     activity_type: ActivityType,
     sleep: bool,
     ota: bool,
@@ -53,7 +53,7 @@ where
             display_buffers,
             filesystem,
             stack: heapless::Vec::new(),
-            activity,
+            activity: Some(activity),
             activity_type,
             sleep: false,
             ota: false,
@@ -76,13 +76,13 @@ where
 
         let rotation = self.display_buffers.rotation();
         let input = buttons.translated(rotation);
-        let state = ApplicationState {
-            input,
-            charge,
-            rotation,
-        };
+        let state = ApplicationState { input, charge, rotation };
 
-        match self.activity.update(&state) {
+        if self.activity.is_none() {
+            return;
+        }
+
+        match self.activity.as_mut().unwrap().update(&state) {
             crate::activities::UpdateResult::None => {}
             crate::activities::UpdateResult::Redraw => self.dirty = true,
             crate::activities::UpdateResult::SetRotation(rotation) => {
@@ -119,15 +119,20 @@ where
         if !self.dirty {
             return;
         }
-        info!("Drawing activity");
-        self.activity.draw(display, self.display_buffers);
+        if let Some(activity) = &mut self.activity {
+            info!("Drawing activity");
+            activity.draw(display, self.display_buffers);
+        }
         self.dirty = false;
     }
 
     fn open(&mut self, activity_type: ActivityType) {
-        self.activity.close();
-        self.activity = Self::create_activity(&activity_type, &self.filesystem);
-        self.activity.start();
+        if let Some(mut current) = self.activity.take() {
+            current.close();
+        }
+        let mut activity = Self::create_activity(&activity_type, &self.filesystem);
+        activity.start();
+        self.activity = Some(activity);
         self.dirty = true;
         self.activity_type = activity_type;
     }
@@ -156,6 +161,6 @@ where
 
 impl<'a, Filesystem> Drop for Application<'a, Filesystem> {
     fn drop(&mut self) {
-        self.activity.close();
+        self.activity.as_deref_mut().map(Activity::close);
     }
 }

@@ -60,6 +60,7 @@ pub struct FileBrowser<Entry: crate::fs::DirEntry> {
 
 impl<FileEntry: crate::fs::DirEntry> FileBrowser<FileEntry> {
     pub fn new(path: Path, entries: Vec<FileEntry>, focus: u8) -> Self {
+        log::trace!("Creating FileBrowser with path: {}", path);
         let focus = WrappingNumber {
             value: focus,
             max: entries.len().saturating_sub(1) as u8,
@@ -84,7 +85,9 @@ impl<FileEntry: crate::fs::DirEntry> super::Activity for FileBrowser<FileEntry> 
             self.focus = self.focus.next();
             super::UpdateResult::Redraw
         } else if buttons.is_pressed(Buttons::Confirm) {
-            let Some(entry) = &self.entries.get(*self.focus as usize) else { return super::UpdateResult::None; };
+            let Some(entry) = &self.entries.get(*self.focus as usize) else {
+                return super::UpdateResult::None;
+            };
             let separator = if !self.path.is_empty() { "/" } else { "" };
             let Ok(path) = heapless::format!("{}{separator}{}", self.path, entry.name()) else {
                 info!(
