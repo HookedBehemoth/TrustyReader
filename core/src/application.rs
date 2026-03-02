@@ -10,6 +10,7 @@ use crate::activities::imageviewer::ImageViewerActivity;
 use crate::activities::reader::ReaderActivity;
 use crate::activities::settings::SettingsActivity;
 
+use crate::container::image;
 use crate::display::RefreshMode;
 use crate::res::img::bebop;
 
@@ -149,8 +150,8 @@ where
             ActivityType::Demo => Box::new(DemoActivity::new()),
             ActivityType::Reader { path } => {
                 let ext = path.rsplit('.').next().unwrap_or(path);
-                if ext.eq_ignore_ascii_case("tbmp") {
-                    Box::new(ImageViewerActivity::new(filesystem, path))
+                if let Some(format) = image::get_format(ext) {
+                    Box::new(ImageViewerActivity::new(filesystem, path, format))
                 } else {
                     Box::new(ReaderActivity::new(filesystem.clone(), path))
                 }

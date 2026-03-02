@@ -134,12 +134,13 @@ impl DisplayBuffers {
 
         let offset_x = (width as i32 - w as i32) / 2;
         let offset_y = (height as i32 - h as i32) / 2;
+        let stride = w.div_ceil(8) as usize;
 
         for y in 0..h as _ {
             for x in 0..w as _ {
-                let index = (y as usize * w as usize + x as usize) / 8;
-                let bit_index = 7 - ((y as usize * w as usize + x as usize) % 8);
-                let color = if (src[index] >> bit_index) & 1 == 1 {
+                let byte_index = y as usize * stride + x as usize / 8;
+                let bit_index = 7 - (x as usize % 8);
+                let color = if (src[byte_index] >> bit_index) & 1 == 1 {
                     BinaryColor::On
                 } else {
                     BinaryColor::Off

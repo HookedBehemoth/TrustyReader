@@ -43,10 +43,6 @@ impl SettingsActivity {
 }
 
 impl super::Activity for SettingsActivity {
-    fn start(&mut self) {
-        log::info!("SettingsActivity started");
-    }
-
     fn update(&mut self, state: &super::ApplicationState) -> super::UpdateResult {
         let buttons = &state.input;
         if buttons.is_pressed(Buttons::Confirm) {

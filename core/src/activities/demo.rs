@@ -390,10 +390,6 @@ impl DemoActivity {
 }
 
 impl super::Activity for DemoActivity {
-    fn start(&mut self) {
-        log::info!("DemoActivity started");
-    }
-
     fn update(&mut self, state: &super::ApplicationState) -> super::UpdateResult {
         let buttons = &state.input;
         // self.dirty |= buttons.is_pressed(input::Buttons::Confirm);

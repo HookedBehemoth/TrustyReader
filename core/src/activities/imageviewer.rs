@@ -1,9 +1,8 @@
-use alloc::vec;
-use embedded_graphics::{pixelcolor::BinaryColor, prelude::DrawTarget};
+use embedded_io::Seek;
 
 use crate::{
     activities::ApplicationState,
-    container::{image, tbmp},
+    container::image::{self, Format},
     display::{Display, RefreshMode},
     framebuffer::{DisplayBuffers, Rotation},
     fs,
@@ -12,64 +11,71 @@ use crate::{
 };
 
 pub struct ImageViewerActivity<Filesystem: fs::Filesystem> {
-    image: image::Image,
+    format: Format,
+    image: Option<image::Image>,
     file: Option<Filesystem::File>,
 }
 
 impl<Filesystem: fs::Filesystem> ImageViewerActivity<Filesystem> {
-    pub fn new(fs: &Filesystem, path: &str) -> Self {
-        let mut file = fs.open_file(path, fs::Mode::Read).unwrap();
+    pub fn new(fs: &Filesystem, path: &str, format: Format) -> Self {
+        let file = fs.open_file(path, fs::Mode::Read).ok();
 
-        let header = tbmp::parse_header(&mut file).unwrap();
-        let image = image::Image::Tbmp(header);
+        ImageViewerActivity { format, image: None, file }
+    }
 
-        ImageViewerActivity { image, file: Some(file) }
+    fn load_image(&mut self, rotation: Rotation) {
+        let Some(file) = &mut self.file else {
+            return;
+        };
+        file.seek(embedded_io::SeekFrom::Start(0)).ok();
+        let sz = rotation.size();
+        self.image = image::decode(self.format, file, sz.width as _, sz.height as _).ok();
     }
 }
 
 impl<Filesystem: fs::Filesystem> super::Activity for ImageViewerActivity<Filesystem> {
     fn draw(&mut self, display: &mut dyn Display, buffers: &mut DisplayBuffers) {
+        log::info!("Drawing ImageViewerActivity");
         let Some(file) = &mut self.file else {
             return;
         };
-        let header = match self.image {
-            image::Image::Tbmp(header) => header,
-            _ => return,
+        let Some(image) = &self.image else {
+            return;
         };
-        let clear = match header.background {
-            tbmp::Background::White => BinaryColor::On,
-            tbmp::Background::Black => BinaryColor::Off,
-        };
-        let mut buffer = vec![0u8; header.buffer_size()];
+        log::info!("Blitting image to display");
 
-        buffers.clear(clear).ok();
-        tbmp::load_buffer(file, &header, Mode::Bw, &mut buffer).ok();
-        buffers.blit(&buffer, header.width, header.height);
+        buffers.clear_screen(0xFF);
+        image.blit_bw(file, buffers);
         display.display(buffers, RefreshMode::Fast);
 
-        buffers.clear(BinaryColor::Off).ok();
-        tbmp::load_buffer(file, &header, Mode::Msb, &mut buffer).ok();
-        buffers.blit(&buffer, header.width, header.height);
-        display.copy_to_msb(buffers.get_active_buffer());
+        if image.has_grayscale() {
+            buffers.clear_screen(0x00);
+            image.blit_gray(file, Mode::Msb, buffers);
+            display.copy_to_msb(buffers.get_active_buffer());
 
-        buffers.clear(BinaryColor::Off).ok();
-        tbmp::load_buffer(file, &header, Mode::Lsb, &mut buffer).ok();
-        buffers.blit(&buffer, header.width, header.height);
-        display.copy_to_lsb(buffers.get_active_buffer());
-        display.display_differential_grayscale(false);
+            buffers.clear_screen(0x00);
+            image.blit_gray(file, Mode::Lsb, buffers);
+            display.copy_to_lsb(buffers.get_active_buffer());
+            display.display_differential_grayscale(false);
+        }
     }
 
     fn update(&mut self, state: &ApplicationState) -> super::UpdateResult {
         let buttons = &state.input;
-        if buttons.is_pressed(Buttons::Back) {
+        if self.image.is_none() {
+            self.load_image(state.rotation);
+            super::UpdateResult::Redraw
+        } else if buttons.is_pressed(Buttons::Back) {
             super::UpdateResult::PopActivity
         } else if buttons.is_pressed(Buttons::Right) {
-            super::UpdateResult::SetRotation(match state.rotation {
+            let rotation = match state.rotation {
                 Rotation::Rotate0 => Rotation::Rotate90,
                 Rotation::Rotate90 => Rotation::Rotate180,
                 Rotation::Rotate180 => Rotation::Rotate270,
                 Rotation::Rotate270 => Rotation::Rotate0,
-            })
+            };
+            self.load_image(rotation);
+            super::UpdateResult::SetRotation(rotation)
         } else {
             super::UpdateResult::None
         }

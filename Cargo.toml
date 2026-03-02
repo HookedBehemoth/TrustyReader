@@ -12,6 +12,7 @@ repository = "https://codeberg.org/behemoth/TrustyReader"
 [workspace.dependencies]
 log = "0.4.27"
 memchr = { version = "2.8.0", default-features = false }
+miniz_oxide = { version = "0.9.0", default-features = false }
 embedded-graphics = "0.8.1"
 embedded-io = "0.6.1"
 embedded-xml = { path = "libs/embedded_xml" }

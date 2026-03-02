@@ -70,10 +70,6 @@ impl<FileEntry: crate::fs::DirEntry> FileBrowser<FileEntry> {
 }
 
 impl<FileEntry: crate::fs::DirEntry> super::Activity for FileBrowser<FileEntry> {
-    fn start(&mut self) {
-        log::info!("FileBrowser started");
-    }
-
     fn update(&mut self, state: &super::ApplicationState) -> super::UpdateResult {
         let buttons = &state.input;
         if buttons.is_pressed(Buttons::Back) {

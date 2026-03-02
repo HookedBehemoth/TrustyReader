@@ -10,6 +10,7 @@ embedded-zip.workspace = true
 embedded-graphics.workspace = true
 embedded-io.workspace = true
 log.workspace = true
+miniz_oxide.workspace = true
 hypher = { version = "0.1.6", default-features = false, features = [
     "alloc",
     "english", "french", "german", "spanish", "italian"

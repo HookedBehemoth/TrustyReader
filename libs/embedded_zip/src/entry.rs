@@ -38,6 +38,7 @@ const COMPRESSION_DEFLATE: u16 = 8;
 pub struct ZipEntryReader<'a, R> {
     reader: &'a mut R,
     compression: u16,
+    offset: u64,
     compressed_remaining: usize,
     uncompressed_remaining: usize,
     // Inflate state for deflate decompression
@@ -88,9 +89,11 @@ impl<'a, R: Read + Seek> ZipEntryReader<'a, R> {
             None
         };
 
+        let offset = reader.stream_position().map_err(ZipError::from_io_error)?;
         Ok(Self {
             reader,
             compression,
+            offset,
             compressed_remaining: lfh.compressed_size as usize,
             uncompressed_remaining: lfh.uncompressed_size as usize,
             inflater,
@@ -99,9 +102,7 @@ impl<'a, R: Read + Seek> ZipEntryReader<'a, R> {
             in_buf_end: 0,
         })
     }
-}
 
-impl<'a, R: Read> ZipEntryReader<'a, R> {
     /// Returns the total uncompressed size of the entry
     pub fn uncompressed_size(&self) -> usize {
         self.uncompressed_remaining
@@ -243,6 +244,15 @@ impl<'a, R: Read> ZipEntryReader<'a, R> {
 
         Ok(n - remaining)
     }
+
+    pub fn reset(&mut self) -> Result<(), ZipError> {
+        if let Some(inflater) = self.inflater.as_mut() {
+            inflater.reset(DataFormat::Zlib);
+        }
+        
+        self.reader.seek(SeekFrom::Start(self.offset)).map_err(ZipError::from_io_error)?;
+        Ok(())
+    }
 }
 
 /// Convenience function to read an entire zip entry into a Vec
@@ -258,16 +268,20 @@ impl<Reader> embedded_io::ErrorType for ZipEntryReader<'_, Reader> {
     type Error = ZipError;
 }
 
-impl<Reader: Read> embedded_io::Read for ZipEntryReader<'_, Reader> {
+impl<Reader: Read + Seek> Read for ZipEntryReader<'_, Reader> {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
         self.read(buf)
     }
 }
 
-impl<Reader: Read> embedded_io::Seek for ZipEntryReader<'_, Reader> {
-    fn seek(&mut self, pos: embedded_io::SeekFrom) -> Result<u64, Self::Error> {
+impl<Reader: Read + Seek> Seek for ZipEntryReader<'_, Reader> {
+    fn seek(&mut self, pos: SeekFrom) -> Result<u64, Self::Error> {
         match pos {
             SeekFrom::Current(n) => self.skip(n as _),
+            SeekFrom::Start(n) => {
+                self.reset()?;
+                self.skip(n)
+            },
             _ => Err(ZipError::IoError(embedded_io::ErrorKind::Unsupported)),
         }
     }

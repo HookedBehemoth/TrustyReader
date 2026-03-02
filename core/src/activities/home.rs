@@ -45,10 +45,6 @@ impl HomeActivity {
 }
 
 impl super::Activity for HomeActivity {
-    fn start(&mut self) {
-        log::info!("HomeActivity started");
-    }
-
     fn update(&mut self, state: &super::ApplicationState) -> super::UpdateResult {
         let buttons = &state.input;
         if buttons.any_pressed(&[Buttons::Up, Buttons::Right]) {
