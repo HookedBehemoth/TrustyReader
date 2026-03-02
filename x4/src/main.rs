@@ -37,7 +37,6 @@ use log::info;
 use trusty_core::application::Application;
 use trusty_core::display::{Display, RefreshMode};
 use trusty_core::framebuffer::DisplayBuffers;
-use trusty_core::fs::{DirEntry, Directory, Filesystem};
 
 extern crate alloc;
 const MAX_BUFFER_SIZE: usize = 512;
@@ -156,7 +155,7 @@ async fn main(spawner: Spawner) {
 
     info!("Initializing SPI for E-Ink Display");
     let eink_cs = Output::new(peripherals.GPIO21, Level::High, OutputConfig::default());
-    let eink_spi_device = RefCellDevice::new(&shared_spi, eink_cs, delay.clone())
+    let eink_spi_device = RefCellDevice::new(shared_spi, eink_cs, delay)
         .expect("Failed to create SPI device");
 
     info!("SPI initialized");
@@ -185,7 +184,7 @@ async fn main(spawner: Spawner) {
     );
 
     let sdcard_cs = Output::new(peripherals.GPIO12, Level::High, OutputConfig::default());
-    let sdcard_spi = RefCellDevice::new(&shared_spi, sdcard_cs, delay)
+    let sdcard_spi = RefCellDevice::new(shared_spi, sdcard_cs, delay)
         .expect("Failed to create SPI device for SD card");
 
     let sdcard = FatFs::new(sdcard_spi, delay);

@@ -58,10 +58,10 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
     pub fn new(filesystem: Filesystem, file_path: &str) -> Self {
         info!("Opening EPUB reader for path: {}", file_path);
         let mut file = filesystem
-            .open_file(&file_path, crate::fs::Mode::Read)
+            .open_file(file_path, crate::fs::Mode::Read)
             .unwrap();
 
-        let book = book::Book::from_file(&file_path, &filesystem, &mut file);
+        let book = book::Book::from_file(file_path, &filesystem, &mut file);
 
         let cache_directory = book.as_ref().map(|book| alloc::format!("{}/cache/{}", BASE_PATH, book.directory_name()));
         if let Some(path) = &cache_directory {
@@ -461,8 +461,8 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
         }
         let size = buffers.size();
         let text_style = MonoTextStyle::new(&FONT_10X20, BinaryColor::Off);
-        if let Some(title) = &self.chapter.as_ref().and_then(|c| c.title.as_deref()) {
-            Text::new(&title, Point::new(10, size.height as i32 - 10), text_style)
+        if let Some(title) = self.chapter.as_ref().and_then(|c| c.title.as_deref()) {
+            Text::new(title, Point::new(10, size.height as i32 - 10), text_style)
                 .draw(buffers)
                 .ok();
         }
@@ -473,7 +473,7 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
 
         if buttons.is_pressed(Buttons::Back) {
             self.show_settings = false;
-            return super::UpdateResult::Redraw;
+            super::UpdateResult::Redraw
         } else if buttons.is_pressed(Buttons::Confirm) {
             use font::FontSize::*;
             use crate::framebuffer::Rotation::*;

@@ -24,7 +24,7 @@ pub fn parse<R: embedded_io::Read>(
     let mut parser = xml::Reader::new(reader, size as _, 8096)?;
 
     let mut paragraphs = alloc::vec![];
-    let mut inline_stylesheet = css::Stylesheet::new();
+    let mut inline_stylesheet = css::Stylesheet::default();
 
     loop {
         let event = parser.next_event()?;
@@ -48,7 +48,7 @@ pub fn parse<R: embedded_io::Read>(
 fn parse_head<R: embedded_io::Read>(
     reader: &mut xml::OwnedReader<R>,
 ) -> super::Result<css::Stylesheet> {
-    let mut stylesheet = css::Stylesheet::new();
+    let mut stylesheet = css::Stylesheet::default();
 
     loop {
         let event = reader.next_event()?;
@@ -62,7 +62,7 @@ fn parse_head<R: embedded_io::Read>(
                 let xml::Event::Text { content } = reader.next_event()? else {
                     continue;
                 };
-                stylesheet.extend_from_sheet(&content);
+                stylesheet.extend_from_sheet(content);
             }
             xml::Event::EndOfFile => break,
             _ => {}
@@ -108,7 +108,7 @@ fn parse_body<R: embedded_io::Read>(
                 let class = attrs.get("class");
                 let inline_style = attrs
                     .get("style")
-                    .map(css::Rule::from_str)
+                    .map(css::Rule::parse)
                     .unwrap_or_default();
                 let style = inline_style
                     + inline_stylesheet.get(name, id, class)
@@ -144,9 +144,9 @@ fn parse_body<R: embedded_io::Read>(
                     parser.flush_run();
                 }
 
-                if parser.bold_depth == None && is_bold(name) {
+                if parser.bold_depth.is_none() && is_bold(name) {
                     parser.set_bold(false);
-                } else if parser.italic_depth == None && is_italic(name) {
+                } else if parser.italic_depth.is_none() && is_italic(name) {
                     parser.set_italic(false);
                 }
 
@@ -237,9 +237,9 @@ impl BodyParser {
         if !self.runs.is_empty() {
             let mut runs = core::mem::take(&mut self.runs);
             // trim whitespace off the end of the last run
-            runs.last_mut().map(|run| {
+            if let Some(run) = runs.last_mut() {
                 run.text = run.text.trim_ascii_end().to_string();
-            });
+            }
             self.paragraphs.push(Paragraph {
                 runs,
                 indent: self.indent,
@@ -265,13 +265,15 @@ impl BodyParser {
             self.current_run.push(' ');
         }
         self.has_trailing_space = text.ends_with(char::is_whitespace);
-        let text = text
+        let decoded = html_escape::decode_html_entities(text);
+        let text = decoded
+            .as_ref()
             .split_whitespace()
             .fold(String::new(), |mut acc, word| {
                 if !acc.is_empty() {
                     acc.push(' ');
                 }
-                acc.push_str(html_escape::decode_html_entities(word).as_ref());
+                acc.push_str(word);
                 acc
             });
         self.current_run.push_str(&text);
@@ -288,17 +290,13 @@ impl BodyParser {
         if self.depth > 0 {
             self.depth -= 1;
         }
-        if let Some(italic_depth) = self.italic_depth {
-            if self.depth < italic_depth {
-                self.set_italic(false);
-                self.italic_depth = None;
-            }
+        if let Some(italic_depth) = self.italic_depth && self.depth < italic_depth {
+            self.set_italic(false);
+            self.italic_depth = None;
         }
-        if let Some(bold_depth) = self.bold_depth {
-            if self.depth < bold_depth {
-                self.set_bold(false);
-                self.bold_depth = None;
-            }
+        if let Some(bold_depth) = self.bold_depth && self.depth < bold_depth{
+            self.set_bold(false);
+            self.bold_depth = None;
         }
     }
 }

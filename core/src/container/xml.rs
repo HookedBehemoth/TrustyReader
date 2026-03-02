@@ -20,7 +20,7 @@ pub fn from_str(text: &str) -> Option<book::Chapter> {
         }
         let mut text = String::new();
         for _ in 0..depth {
-            text.push_str("-");
+            text.push('-');
         }
         write!(text, "{event:?}").unwrap();
         info!("XML event: {text:?}");

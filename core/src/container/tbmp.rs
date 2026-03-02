@@ -16,7 +16,7 @@ pub struct Header {
 
 impl Header {
     pub fn buffer_size(&self) -> usize {
-        (self.width as usize * self.height as usize + 7) / 8
+        (self.width as usize * self.height as usize).div_ceil(8)
     }
 }
 

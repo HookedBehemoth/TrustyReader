@@ -3,7 +3,7 @@
 
 use crate::res::font::{FontDefinition, Glyph};
 
-pub static FONT: FontDefinition = FontDefinition {
+pub const FONT: FontDefinition = FontDefinition {
     size: 13573,
     y_advance: 30,
     glyphs: &GLYPHS,
@@ -12,7 +12,7 @@ pub static FONT: FontDefinition = FontDefinition {
     bitmap_lsb: BITMAP_LSB,
 };
 
-static GLYPHS: [Glyph; 288] = [
+const GLYPHS: [Glyph; 288] = [
     Glyph::new(0x0020, 0x0000, 7, 0, 0, 0, 0),
     Glyph::new(0x0021, 0x0000, 10, 9, 24, 1, -1),
     Glyph::new(0x0022, 0x001B, 12, 11, 10, 1, 12),
@@ -303,6 +303,6 @@ static GLYPHS: [Glyph; 288] = [
     Glyph::new(0x2265, 0x34E7, 19, 13, 18, 3, 0),
 ];
 
-static BITMAP_BW: &'static [u8; 13573] = include_bytes!("./bookerly_italic_30.bw");
-static BITMAP_MSB: &'static [u8; 13573] = include_bytes!("./bookerly_italic_30.msb");
-static BITMAP_LSB: &'static [u8; 13573] = include_bytes!("./bookerly_italic_30.lsb");
+const BITMAP_BW: &[u8; 13573] = include_bytes!("./bookerly_italic_30.bw");
+const BITMAP_MSB: &[u8; 13573] = include_bytes!("./bookerly_italic_30.msb");
+const BITMAP_LSB: &[u8; 13573] = include_bytes!("./bookerly_italic_30.lsb");

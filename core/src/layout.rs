@@ -208,7 +208,7 @@ fn hyphenate<'a>(
             }
 
             let text = &word[0..length + prefix_byte_len];
-            let text = if text.chars().last() != Some('-') {
+            let text = if text.ends_with('-') {
                 text
             } else {
                 x += options.dash_width;

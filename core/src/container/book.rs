@@ -60,7 +60,7 @@ impl Book {
                 let stylesheet = filesystem.open_file(&css_path, fs::Mode::Read).ok().and_then(|mut css_file| {
                     let css_contents = css_file.read_to_end().ok()?;
                     let css_text = String::from_utf8(css_contents).ok()?;
-                    let mut stylesheet = css::Stylesheet::new();
+                    let mut stylesheet = css::Stylesheet::default();
                     stylesheet.extend_from_sheet(&css_text);
                     Some(stylesheet)
                 });
@@ -74,7 +74,7 @@ impl Book {
                 let stylesheet = filesystem.open_file(&css_path, fs::Mode::Read).ok().and_then(|mut css_file| {
                     let css_contents = css_file.read_to_end().ok()?;
                     let css_text = String::from_utf8(css_contents).ok()?;
-                    let mut stylesheet = css::Stylesheet::new();
+                    let mut stylesheet = css::Stylesheet::default();
                     stylesheet.extend_from_sheet(&css_text);
                     Some(stylesheet)
                 });

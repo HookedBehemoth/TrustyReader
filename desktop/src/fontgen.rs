@@ -138,7 +138,7 @@ fn generate_font_size(font: &fontdue::Font, font_size: f32, characters: &[char],
     rust_code.push_str(&format!("// Font: {}\n\n", name));
     rust_code.push_str("use crate::res::font::{FontDefinition, Glyph};\n\n");
     rust_code.push_str(&format!(
-        "pub static FONT: FontDefinition = FontDefinition {{\n"
+        "pub const FONT: FontDefinition = FontDefinition {{\n"
     ));
     rust_code.push_str(&format!("    size: {},\n", my_font.size));
     rust_code.push_str(&format!("    y_advance: {},\n", my_font.y_advance));
@@ -147,7 +147,7 @@ fn generate_font_size(font: &fontdue::Font, font_size: f32, characters: &[char],
     rust_code.push_str(&format!("    bitmap_msb: BITMAP_MSB,\n"));
     rust_code.push_str(&format!("    bitmap_lsb: BITMAP_LSB,\n"));
     rust_code.push_str("};\n\n");
-    rust_code.push_str(&format!("static GLYPHS: [Glyph; {}] = [\n", glyphs.len()));
+    rust_code.push_str(&format!("const GLYPHS: [Glyph; {}] = [\n", glyphs.len()));
     for glyph in &glyphs {
         rust_code.push_str(&format!(
             "    Glyph::new(0x{:04X}, 0x{:04X}, {}, {}, {}, {}, {}),\n",
@@ -162,17 +162,17 @@ fn generate_font_size(font: &fontdue::Font, font_size: f32, characters: &[char],
     }
     rust_code.push_str("];\n\n");
     rust_code.push_str(&format!(
-        "static BITMAP_BW: &'static [u8; {}] = include_bytes!(\"./{}.bw\");\n",
+        "const BITMAP_BW: &[u8; {}] = include_bytes!(\"./{}.bw\");\n",
         bw_buffer.len(),
         file_name
     ));
     rust_code.push_str(&format!(
-        "static BITMAP_MSB: &'static [u8; {}] = include_bytes!(\"./{}.msb\");\n",
+        "const BITMAP_MSB: &[u8; {}] = include_bytes!(\"./{}.msb\");\n",
         msb_buffer.len(),
         file_name
     ));
     rust_code.push_str(&format!(
-        "static BITMAP_LSB: &'static [u8; {}] = include_bytes!(\"./{}.lsb\");\n",
+        "const BITMAP_LSB: &[u8; {}] = include_bytes!(\"./{}.lsb\");\n",
         lsb_buffer.len(),
         file_name
     ));
@@ -331,7 +331,7 @@ fn analyze_font_metrics(font: &fontdue::Font, font_size: f32) {
     info!("Ymin Range: {} to {}", min_ymin, max_ymin);
 }
 
-static DEFAULT_CHARACTERS: &str = r##" !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~¡¢£¤¥§©ª«®°±²³µ¶·¹º»¼½¾¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÞßàáâãäåæçèéêëìíîïðñòóôõö÷øùúûüþÿĄąĆćČčĎďĘęĚěĹĺĽľŁłŃńŇňŒœŘřŚśŠšŤťŮůŰűŸŹźŻżŽžπẞ–—’†‡•…‹›⁰⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉₩₪€₴₹₽™⅓⅔⅛⅜⅝⅞←↑→↓↔↕⇐⇑⇒⇓⇔∂∆∏∑√∞∫≠≤≥─│┌┐└┘├┤┬┴┼═║╔╗╚╝╠╣╦╩╬‘’‚‛“”„‟"##;
+const DEFAULT_CHARACTERS: &str = r##" !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~¡¢£¤¥§©ª«®°±²³µ¶·¹º»¼½¾¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÞßàáâãäåæçèéêëìíîïðñòóôõö÷øùúûüþÿĄąĆćČčĎďĘęĚěĹĺĽľŁłŃńŇňŒœŘřŚśŠšŤťŮůŰűŸŹźŻżŽžπẞ–—’†‡•…‹›⁰⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉₩₪€₴₹₽™⅓⅔⅛⅜⅝⅞←↑→↓↔↕⇐⇑⇒⇓⇔∂∆∏∑√∞∫≠≤≥─│┌┐└┘├┤┬┴┼═║╔╗╚╝╠╣╦╩╬‘’‚‛“”„‟"##;
 
 fn load_chars(path: Option<&str>) -> Vec<char> {
     let mut characters = if let Some(character_file) = path {

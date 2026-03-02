@@ -103,7 +103,7 @@ pub fn parse(file: &mut impl File, file_resolver: FileResolver, rootfile: &str) 
 
     let stylesheet = manifest
     .iter().filter(|(_, item)| item.media_type == MediaType::Css)
-    .fold(css::Stylesheet::new(), |mut sheet, (_, item)| {
+    .fold(css::Stylesheet::default(), |mut sheet, (_, item)| {
         let Some(entry) = file_resolver.entry(item.file_idx) else {
             return sheet;
         };

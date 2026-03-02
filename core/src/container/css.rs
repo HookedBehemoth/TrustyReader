@@ -1,12 +1,10 @@
 use core::ops::Add;
 
-use alloc::{
-    string::String,
-    vec::Vec,
-};
+use alloc::{string::String, vec::Vec};
 
 use crate::layout;
 
+#[derive(Default)]
 pub struct Stylesheet {
     rules: Vec<(Selector, Rule)>,
 }
@@ -73,18 +71,14 @@ impl Selector {
             return None;
         }
 
-        Some(Self {
-            element,
-            id,
-            classes,
-        })
+        Some(Self { element, id, classes })
     }
 
     fn matches(&self, element: &str, id: Option<&str>, classes: &[&str]) -> bool {
-        if let Some(ref el) = self.element {
-            if el != element {
-                return false;
-            }
+        if let Some(ref el) = self.element
+            && el != element
+        {
+            return false;
         }
         if let Some(ref sel_id) = self.id {
             match id {
@@ -106,10 +100,6 @@ impl Selector {
 }
 
 impl Stylesheet {
-    pub fn new() -> Self {
-        Self { rules: Vec::new() }
-    }
-
     /// Look up the cascaded rule for an element given its tag name, optional
     /// `id` attribute, and optional `class` attribute (space-separated list).
     pub fn get(&self, element: &str, id: Option<&str>, class: Option<&str>) -> Rule {
@@ -140,7 +130,7 @@ impl Stylesheet {
         let mut pos = 0;
         while pos < sheet.len() {
             let remaining = &sheet[pos..];
-            let Some(brace_pos) = remaining.find(|c| c == '{' || c == '@') else {
+            let Some(brace_pos) = remaining.find(['{', '@']) else {
                 break;
             };
 
@@ -165,7 +155,7 @@ impl Stylesheet {
 
             // Ignore rules whose body contains nested braces (nested rules).
             if !declarations.contains('{') {
-                let rule = Rule::from_str(declarations);
+                let rule = Rule::parse(declarations);
                 if rule.has_any() {
                     // Handle grouped selectors (comma-separated).
                     for sel_str in selector_text.split(',') {
@@ -244,7 +234,7 @@ impl Stylesheet {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 pub struct Rule {
     pub alignment: Option<layout::Alignment>,
     pub italic: Option<bool>,
@@ -254,7 +244,7 @@ pub struct Rule {
 
 impl Rule {
     /// CSS from inside a "style" attribute or inside a stylesheet rule.
-    pub fn from_str(s: &str) -> Self {
+    pub fn parse(s: &str) -> Self {
         let s = s.trim().to_ascii_lowercase();
         let parts = s.split(';').map(|p| p.trim());
         let mut rule = Self::default();
@@ -288,10 +278,10 @@ impl Rule {
                     }
                 }
                 "text-indent" => {
-                    if let Some(indent) = value.trim().strip_suffix("px") {
-                        if let Ok(indent) = indent.parse::<u16>() {
-                            rule.indent = Some(indent);
-                        }
+                    if let Some(indent) = value.trim().strip_suffix("px")
+                        && let Ok(indent) = indent.parse::<u16>()
+                    {
+                        rule.indent = Some(indent);
                     }
                 }
                 _ => {}
@@ -306,17 +296,6 @@ impl Rule {
             || self.italic.is_some()
             || self.bold.is_some()
             || self.indent.is_some()
-    }
-}
-
-impl Default for Rule {
-    fn default() -> Self {
-        Self {
-            alignment: None,
-            italic: None,
-            bold: None,
-            indent: None,
-        }
     }
 }
 

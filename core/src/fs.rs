@@ -49,8 +49,7 @@ pub trait File: Read + Write + Seek {
         Ok(())
     }
     fn read_to_end(&mut self) -> core::result::Result<Vec<u8>, Self::Error> {
-        let mut buf = Vec::new();
-        buf.resize(self.size(), 0x00);
+        let mut buf = alloc::vec![0u8; self.size()];
         self.read(buf.as_mut_slice())?;
         Ok(buf)
     }

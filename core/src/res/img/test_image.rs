@@ -9,6 +9,6 @@
 
 use crate::framebuffer::BUFFER_SIZE;
 
-pub static TEST_IMAGE: &'static [u8; BUFFER_SIZE] = include_bytes!("./test_image.bin");
-pub static TEST_IMAGE_LSB: &'static [u8; BUFFER_SIZE] = include_bytes!("./test_image_lsb.bin");
-pub static TEST_IMAGE_MSB: &'static [u8; BUFFER_SIZE] = include_bytes!("./test_image_msb.bin");
+pub const TEST_IMAGE: &[u8; BUFFER_SIZE] = include_bytes!("./test_image.bin");
+pub const TEST_IMAGE_LSB: &[u8; BUFFER_SIZE] = include_bytes!("./test_image_lsb.bin");
+pub const TEST_IMAGE_MSB: &[u8; BUFFER_SIZE] = include_bytes!("./test_image_msb.bin");

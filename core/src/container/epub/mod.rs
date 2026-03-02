@@ -85,5 +85,5 @@ pub fn parse_chapter(epub: &Epub, index: usize, file: &mut impl File) -> Result<
     info!("Chapter file entry: {}", entry.name);
     let reader = ZipEntryReader::new(file, entry)?;
 
-    spine::parse(title, reader, entry.size as usize, Some(&epub.stylesheet)).map_err(Into::into)
+    spine::parse(title, reader, entry.size as usize, Some(&epub.stylesheet))
 }

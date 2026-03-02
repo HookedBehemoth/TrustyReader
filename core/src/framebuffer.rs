@@ -144,7 +144,7 @@ impl DisplayBuffers {
                 } else {
                     BinaryColor::Off
                 };
-                self.set_pixel(x as i32 + offset_x, y as i32 + offset_y, color);
+                self.set_pixel(x + offset_x, y + offset_y, color);
             }
         }
     }

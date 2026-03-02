@@ -272,23 +272,23 @@ where
 
     fn reset_display(&mut self) {
         info!("Resetting display");
-        let _ = self.rst.set_high();
+        self.rst.set_high();
         self.delay.delay_millis(20);
-        let _ = self.rst.set_low();
+        self.rst.set_low();
         self.delay.delay_millis(2);
-        let _ = self.rst.set_high();
+        self.rst.set_high();
         self.delay.delay_millis(20);
         info!("Display reset complete");
     }
 
     fn send_command(&mut self, command: u8) -> Result<(), SPI::Error> {
-        let _ = self.dc.set_low(); // Command mode
+        self.dc.set_low(); // Command mode
         self.spi.write(&[command])?;
         Ok(())
     }
 
     fn send_data(&mut self, data: &[u8]) -> Result<(), SPI::Error> {
-        let _ = self.dc.set_high(); // Data mode
+        self.dc.set_high(); // Data mode
         self.spi.write(data)?;
         Ok(())
     }

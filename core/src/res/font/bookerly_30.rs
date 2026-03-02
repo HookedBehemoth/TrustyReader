@@ -3,7 +3,7 @@
 
 use crate::res::font::{FontDefinition, Glyph};
 
-pub static FONT: FontDefinition = FontDefinition {
+pub const FONT: FontDefinition = FontDefinition {
     size: 13055,
     y_advance: 30,
     glyphs: &GLYPHS,
@@ -12,7 +12,7 @@ pub static FONT: FontDefinition = FontDefinition {
     bitmap_lsb: BITMAP_LSB,
 };
 
-static GLYPHS: [Glyph; 288] = [
+const GLYPHS: [Glyph; 288] = [
     Glyph::new(0x0020, 0x0000, 7, 0, 0, 0, 0),
     Glyph::new(0x0021, 0x0000, 9, 5, 24, 2, -1),
     Glyph::new(0x0022, 0x000F, 12, 9, 10, 1, 12),
@@ -303,6 +303,6 @@ static GLYPHS: [Glyph; 288] = [
     Glyph::new(0x2265, 0x32E1, 19, 13, 18, 3, 0),
 ];
 
-static BITMAP_BW: &'static [u8; 13055] = include_bytes!("./bookerly_30.bw");
-static BITMAP_MSB: &'static [u8; 13055] = include_bytes!("./bookerly_30.msb");
-static BITMAP_LSB: &'static [u8; 13055] = include_bytes!("./bookerly_30.lsb");
+const BITMAP_BW: &[u8; 13055] = include_bytes!("./bookerly_30.bw");
+const BITMAP_MSB: &[u8; 13055] = include_bytes!("./bookerly_30.msb");
+const BITMAP_LSB: &[u8; 13055] = include_bytes!("./bookerly_30.lsb");

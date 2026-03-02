@@ -121,6 +121,7 @@ pub unsafe extern "C" fn disk_read(
     unsafe {
         if let Some(driver) = &*core::ptr::addr_of!(DRIVER) {
             for i in 0..count {
+                // TODO: transmute from buff + 512 * i
                 let mut block = [Block::new()];
                 let block_idx = BlockIdx((sector + i) as _);
                 if let Err(_) = driver.read(&mut block, block_idx) {
@@ -314,18 +315,10 @@ unsafe extern "C" {
     fn f_mkdir(path: *const u8) -> FRESULT;
     fn f_unlink(path: *const u8) -> FRESULT;
     fn f_rename(path_old: *const u8, path_new: *const u8) -> FRESULT;
-    fn f_stat(path: *const u8, fno: *mut FILINFO) -> FRESULT;
-
-    // Volume operations
-    fn f_mount(fs: *mut FATFS, path: *const u8, opt: BYTE) -> FRESULT;
-    fn f_chdir(path: *const u8) -> FRESULT;
-    fn f_chdrive(path: *const u8) -> FRESULT;
-    fn f_getcwd(buff: *mut u8, len: UINT) -> FRESULT;
 
     // Custom helper functions
     fn ff_mount() -> FRESULT;
     fn ff_exists(path: *const u8) -> bool;
-    fn getnum() -> i32;
 }
 
 const FA_READ: BYTE = 0x01;

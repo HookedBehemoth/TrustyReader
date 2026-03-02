@@ -19,8 +19,8 @@ pub(super) fn parse(file: &mut impl File, entries: &[ZipFileEntry]) -> Result<St
 
     info!("Parsing EPUB container");
 
-    let reader = ZipEntryReader::new(file, entry)?;
-    let mut parser = xml::Reader::new(reader, entry.size as _, 512)?;
+    let mut reader = ZipEntryReader::new(file, entry)?;
+    let mut parser = xml::Reader::new(&mut reader, entry.size as _, 512)?;
     loop {
         let event = parser.next_event()?;
         trace!("Event: {event:?}");

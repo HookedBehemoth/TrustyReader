@@ -1,5 +1,5 @@
 /// XML attribute reader
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct AttributeReader<'a> {
     remaining: &'a str,
 }
@@ -11,12 +11,6 @@ impl core::fmt::Debug for AttributeReader<'_> {
             builder.entry(&n, &v);
         }
         builder.finish()
-    }
-}
-
-impl Default for AttributeReader<'_> {
-    fn default() -> Self {
-        AttributeReader { remaining: "" }
     }
 }
 

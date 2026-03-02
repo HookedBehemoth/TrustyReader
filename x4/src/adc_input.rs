@@ -4,7 +4,7 @@ use esp_hal::{
     gpio::{AnalogPin, Input, InputConfig, InputPin, Pull},
     peripherals::ADC1,
 };
-use log::{info, trace};
+use log::trace;
 use trusty_core::{battery::ChargeState, input::ButtonState};
 
 const ADC_THRESHOLDS_1: [i16; 4] = [2635, 2015, 1117, 3];

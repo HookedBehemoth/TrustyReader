@@ -10,7 +10,7 @@ pub struct TableOfContents {
 }
 
 pub fn parse(
-    reader: &mut impl Read,
+    reader: impl Read,
     size: usize,
     file_resolver: &super::FileResolver,
 ) -> super::Result<TableOfContents> {
