@@ -40,6 +40,12 @@ impl core::fmt::Display for Needle {
         write!(f, "{}", core::str::from_utf8(self.bytes).unwrap())
     }
 }
+const N_CDATA: (Needle, Needle) = (f("<![CDATA["), f("]]>"));
+const N_COMMENT: (Needle, Needle) = (f("<!--"), f("-->"));
+const N_DTD: (Needle, Needle) = (f("<!"), f(">"));
+const N_PI: (Needle, Needle) = (f("<?"), f("?>"));
+const N_END_ELEMENT: (Needle, Needle) = (f("</"), f(">"));
+const N_START_ELEMENT: (Needle, Needle) = (f("<"), f(">"));
 
 const fn hash_add(val: &mut u32, byte: u8) {
     *val = val.wrapping_shl(1).wrapping_add(byte as u32);
@@ -204,13 +210,13 @@ impl<R: embedded_io::Read, Buffer: AsRef<[u8]> + AsMut<[u8]>> Reader<R, Buffer> 
         }
 
         let b = self.buffer();
-        let (ty, n_start, n_end) = match (b[1], b[2]) {
-            (b'!', b'[') => (BlockType::Cdata, f("<![CDATA["), f("]]>")),
-            (b'!', b'-') => (BlockType::Comment, f("<!--"), f("-->")),
-            (b'!', _) => (BlockType::Dtd, f("<!"), f(">")),
-            (b'?', _) => (BlockType::PI, f("<?"), f("?>")),
-            (b'/', _) => (BlockType::EndElement, f("</"), f(">")),
-            (_, _) => (BlockType::StartElement, f("<"), f(">")),
+        let (ty, (n_start, n_end)) = match (b[1], b[2]) {
+            (b'!', b'[') => (BlockType::Cdata, N_CDATA),
+            (b'!', b'-') => (BlockType::Comment, N_COMMENT),
+            (b'!', _) => (BlockType::Dtd, N_DTD),
+            (b'?', _) => (BlockType::PI, N_PI),
+            (b'/', _) => (BlockType::EndElement, N_END_ELEMENT),
+            (_, _) => (BlockType::StartElement, N_START_ELEMENT),
         };
 
         let (start, end) = self.try_find(&n_start, &n_end)?;
