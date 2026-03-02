@@ -120,19 +120,9 @@ pub unsafe extern "C" fn disk_read(
     trace!("disk_read called: sector {}, count {}", sector, count);
     unsafe {
         if let Some(driver) = &*core::ptr::addr_of!(DRIVER) {
-            for i in 0..count {
-                // TODO: transmute from buff + 512 * i
-                let mut block = [Block::new()];
-                let block_idx = BlockIdx((sector + i) as _);
-                if let Err(_) = driver.read(&mut block, block_idx) {
-                    return DRESULT_RES_ERROR;
-                }
-                let block_bytes = block[0].as_slice();
-                let dest = core::slice::from_raw_parts_mut(
-                    buff.add((i as usize) * SECTOR_SIZE),
-                    SECTOR_SIZE,
-                );
-                dest.copy_from_slice(block_bytes);
+            let blocks = core::slice::from_raw_parts_mut(buff as *mut Block, count as usize);
+            if driver.read(blocks, BlockIdx(sector as _)).is_err() {
+                return DRESULT_RES_ERROR;
             }
             DRESULT_RES_OK
         } else {
@@ -152,14 +142,9 @@ pub unsafe extern "C" fn disk_write(
     trace!("disk_write called: sector {}, count {}", sector, count);
     unsafe {
         if let Some(driver) = &*core::ptr::addr_of!(DRIVER) {
-            for i in 0..count {
-                let mut block = [Block::new()];
-                let block_idx = BlockIdx((sector + i) as _);
-                let src = slice::from_raw_parts(buff.add((i as usize) * SECTOR_SIZE), SECTOR_SIZE);
-                block[0].as_mut_slice().copy_from_slice(src);
-                if let Err(_) = driver.write(&block, block_idx) {
-                    return DRESULT_RES_ERROR;
-                }
+            let blocks = core::slice::from_raw_parts(buff as *const Block, count as usize);
+            if driver.write(blocks, BlockIdx(sector as _)).is_err() {
+                return DRESULT_RES_ERROR;
             }
             DRESULT_RES_OK
         } else {
