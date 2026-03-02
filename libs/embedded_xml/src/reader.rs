@@ -1,4 +1,5 @@
 use embedded_io::Error;
+use memchr::arch::all::rabinkarp::Finder;
 
 use crate::Result;
 use crate::attributes::AttributeReader;
@@ -16,6 +17,51 @@ macro_rules! trace {
         #[cfg(test)]
         std::eprintln!($($arg)*);
     };
+}
+
+struct FakeFinder {
+    hash: u32,
+    hash_2pow: u32,
+}
+struct Needle {
+    bytes: &'static [u8],
+    finder: Finder,
+}
+impl Needle {
+    fn find(&self, haystack: &[u8]) -> Option<usize> {
+        self.finder.find(haystack, self.bytes)
+    }
+    fn len(&self) -> usize {
+        self.bytes.len()
+    }
+}
+impl core::fmt::Display for Needle {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{}", core::str::from_utf8(self.bytes).unwrap())
+    }
+}
+
+const fn hash_add(val: &mut u32, byte: u8) {
+    *val = val.wrapping_shl(1).wrapping_add(byte as u32);
+}
+
+const fn f(needle: &'static str) -> Needle {
+    let needle = needle.as_bytes();
+    let mut s = FakeFinder { hash: 0u32, hash_2pow: 1 };
+    hash_add(&mut s.hash, needle[0]);
+    let mut i = 1;
+    loop {
+        if i >= needle.len() {
+            break;
+        }
+        hash_add(&mut s.hash, needle[i]);
+        s.hash_2pow = s.hash_2pow.wrapping_shl(1);
+        i += 1;
+    }
+    Needle {
+        bytes: needle,
+        finder: unsafe { core::mem::transmute(s) },
+    }
 }
 
 /// A streaming XML reader.
@@ -125,7 +171,7 @@ impl<R: embedded_io::Read, Buffer: AsRef<[u8]> + AsMut<[u8]>> Reader<R, Buffer> 
             return Ok(Event::EndElement { name });
         }
 
-        let curr_end = match self.try_find_start("<") {
+        let curr_end = match self.try_find_start() {
             Ok(pos) => pos,
             Err(crate::Error::Eof) => return Ok(Event::EndOfFile),
             Err(e) => return Err(e),
@@ -159,15 +205,15 @@ impl<R: embedded_io::Read, Buffer: AsRef<[u8]> + AsMut<[u8]>> Reader<R, Buffer> 
 
         let b = self.buffer();
         let (ty, n_start, n_end) = match (b[1], b[2]) {
-            (b'!', b'[') => (BlockType::Cdata, "<![CDATA[", "]]>"),
-            (b'!', b'-') => (BlockType::Comment, "<!--", "-->"),
-            (b'!', _) => (BlockType::Dtd, "<!", ">"),
-            (b'?', _) => (BlockType::PI, "<?", "?>"),
-            (b'/', _) => (BlockType::EndElement, "</", ">"),
-            (_, _) => (BlockType::StartElement, "<", ">"),
+            (b'!', b'[') => (BlockType::Cdata, f("<![CDATA["), f("]]>")),
+            (b'!', b'-') => (BlockType::Comment, f("<!--"), f("-->")),
+            (b'!', _) => (BlockType::Dtd, f("<!"), f(">")),
+            (b'?', _) => (BlockType::PI, f("<?"), f("?>")),
+            (b'/', _) => (BlockType::EndElement, f("</"), f(">")),
+            (_, _) => (BlockType::StartElement, f("<"), f(">")),
         };
 
-        let (start, end) = self.try_find(n_start, n_end)?;
+        let (start, end) = self.try_find(&n_start, &n_end)?;
 
         let range = if matches!(ty, BlockType::StartElement) && self.buffer()[end - 1] == b'/' {
             let range = self.pos + start..self.pos + end - 1;
@@ -262,18 +308,16 @@ impl<R: embedded_io::Read, Buffer: AsRef<[u8]> + AsMut<[u8]>> Reader<R, Buffer> 
     /// Tries to find start & end needles in the buffer.
     /// If we find the start needle but not the end, we advance to have the start at 0 and try again - once.
     /// If we find neither, we advance to the end of the buffer and try again - once.
-    fn try_find(&mut self, n_start: &str, n_end: &str) -> Result<(usize, usize)> {
+    fn try_find(&mut self, n_start: &Needle, n_end: &Needle) -> Result<(usize, usize)> {
         trace!(
             "Trying to find '{n_start}' and '{n_end}' (remaining: {})",
             self.remaining
         );
-        let n_start = n_start.as_bytes();
-        let n_end = n_end.as_bytes();
         match find_span(self.buffer(), n_start, n_end) {
             Some((start, Some(end))) => Ok((start, end)),
             Some((start, None)) => {
                 self.advance(self.pos + start)?;
-                let Some(end) = memchr::memmem::find(self.buffer(), n_end) else {
+                let Some(end) = n_end.find(self.buffer()) else {
                     return Err(crate::Error::Eof);
                 };
                 Ok((0, end))
@@ -290,17 +334,16 @@ impl<R: embedded_io::Read, Buffer: AsRef<[u8]> + AsMut<[u8]>> Reader<R, Buffer> 
 
     /// Tries to find the start needle in the buffer.
     /// If it is not found, we advance to the end of the buffer and try again - once.
-    fn try_find_start(&mut self, n_start: &str) -> Result<usize> {
+    fn try_find_start(&mut self) -> Result<usize> {
         trace!(
-            "Trying to find start '{n_start}' (pos: {}, remaining: {})",
+            "Trying to find start '<' (pos: {}, remaining: {})",
             self.pos, self.remaining
         );
-        let n_start = n_start.as_bytes();
-        match memchr::memmem::find(self.buffer(), n_start) {
+        match memchr::memchr(b'<', self.buffer()) {
             Some(pos) => Ok(pos),
             None => {
                 self.advance(self.pos)?;
-                let Some(pos) = memchr::memmem::find(self.buffer(), n_start) else {
+                let Some(pos) = memchr::memchr(b'<', self.buffer()) else {
                     trace!("Needle not found!");
                     return Err(crate::Error::Eof);
                 };
@@ -314,9 +357,9 @@ impl<R: embedded_io::Read, Buffer: AsRef<[u8]> + AsMut<[u8]>> Reader<R, Buffer> 
     }
 }
 
-fn find_span(buffer: &[u8], start: &[u8], end: &[u8]) -> Option<(usize, Option<usize>)> {
-    let start = memchr::memmem::find(buffer, start)? + start.len();
-    let end = memchr::memmem::find(&buffer[start..], end).map(|pos| pos + start);
+fn find_span(buffer: &[u8], start: &Needle, end: &Needle) -> Option<(usize, Option<usize>)> {
+    let start = start.find(buffer)? + start.len();
+    let end = end.find(&buffer[start..]).map(|pos| pos + start);
     Some((start, end))
 }
 
@@ -358,12 +401,12 @@ mod tests {
             </root>";
         let data = xml.as_bytes();
 
-        let Some((start, Some(end))) = find_span(data, b"<", b">") else {
+        let Some((start, Some(end))) = find_span(data, &f("<"), &f(">")) else {
             panic!("Failed to find span");
         };
         assert_eq!(&xml[start..end], "root");
 
-        let Some((start, Some(end))) = find_span(data, b"<child>", b"</child>") else {
+        let Some((start, Some(end))) = find_span(data, &f("<child>"), &f("</child>")) else {
             panic!("Failed to find span");
         };
         assert_eq!(&xml[start..end], "Text");
@@ -374,10 +417,10 @@ mod tests {
     fn test_find() {
         fn find_str<'a>(
             parser: &'a mut OwnedReader<&'_ [u8]>,
-            n_start: &str,
-            n_end: &str,
+            n_start: &'static str,
+            n_end: &'static str,
         ) -> Result<&'a str> {
-            let (start, end) = parser.try_find(n_start, n_end)?;
+            let (start, end) = parser.try_find(&f(n_start), &f(n_end))?;
             Ok(core::str::from_utf8(&parser.buffer[start..end])?)
         }
 

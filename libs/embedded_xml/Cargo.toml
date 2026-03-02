@@ -19,3 +19,11 @@ log = ["dep:log"]
 alloc = []
 
 default = ["alloc"]
+
+[[bench]]
+name = "read_bench"
+harness = false
+
+[dev-dependencies]
+criterion = "0.4"
+embedded-io.workspace = true
