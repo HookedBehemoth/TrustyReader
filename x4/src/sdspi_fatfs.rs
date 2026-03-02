@@ -252,7 +252,6 @@ pub struct FIL {
     sect: DWORD,        // LBA_t
     dir_sect: DWORD,    // LBA_t (only if !FF_FS_READONLY)
     dir_ptr: *mut BYTE, // (only if !FF_FS_READONLY)
-    buf: [BYTE; 512],   // FF_MAX_SS (only if !FF_FS_TINY)
 }
 
 // DIR structure from ff.h
@@ -281,19 +280,19 @@ pub struct FILINFO {
 
 const _: () = assert!(
     core::mem::size_of::<FFOBJID>() == 48,
-    "FFOBJID size must be 0 bytes as it's opaque"
+    "FFOBJID size must be 48 bytes to match C"
 );
 const _: () = assert!(
-    core::mem::size_of::<FIL>() == 592,
-    "FIL size must be 588 bytes to match C"
+    core::mem::size_of::<FIL>() == 80,
+    "FIL size must be 80 bytes to match C"
 );
 const _: () = assert!(
     core::mem::size_of::<DIR>() == 80,
-    "DIR size must be 64 bytes to match C"
+    "DIR size must be 80 bytes to match C"
 );
 const _: () = assert!(
     core::mem::size_of::<FILINFO>() == 288,
-    "FILINFO size must be 320 bytes to match C"
+    "FILINFO size must be 288 bytes to match C"
 );
 
 unsafe extern "C" {
