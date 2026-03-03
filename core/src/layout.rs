@@ -208,13 +208,9 @@ fn hyphenate<'a>(
             }
 
             let text = &word[0..length + prefix_byte_len];
-            let text = if text.ends_with('-') {
-                text
-            } else {
-                x += options.dash_width;
-                &text[0..text.len() - 1]
-            };
-            current_line.hyphenated = true;
+            if text.chars().last() != Some('-') {
+                current_line.hyphenated = true;
+            }
             current_line.words.push(Text { text, x, style });
             let remaining = &word[length + prefix_byte_len..];
             log::trace!("Hyphenating word '{word}' from '{main}' into '{text}' and '{remaining}'");
