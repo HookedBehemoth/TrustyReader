@@ -32,6 +32,7 @@ impl Image {
             Image::Tbmp(tbmp) => {
                 let mut buffer = alloc::vec![0u8; tbmp.buffer_size()];
                 tbmp::load_buffer(file, &tbmp, Mode::Bw, &mut buffer).ok();
+                buffers.blit(&buffer, tbmp.width, tbmp.height);
             }
             Image::OneBpp(decoded) => {
                 buffers.blit(&decoded.data, decoded.width, decoded.height);
