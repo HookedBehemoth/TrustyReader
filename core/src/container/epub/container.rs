@@ -9,12 +9,12 @@ use zip::{ZipEntryReader, ZipFileEntry};
 use super::Result;
 use super::error::{EpubError, RequiredFileTypes};
 
-const CONTAINER_PATH: &str = "META-INF/container.xml";
+const CONTAINER_HASH: u32 = ZipFileEntry::hash("META-INF/container.xml");
 
 pub(super) fn parse(file: &mut impl File, entries: &[ZipFileEntry]) -> Result<String> {
     let entry = entries
         .iter()
-        .find(|e| e.name == CONTAINER_PATH)
+        .find(|e| e.name_hash == CONTAINER_HASH)
         .ok_or(EpubError::FileMissing(RequiredFileTypes::Container))?;
 
     info!("Parsing EPUB container");

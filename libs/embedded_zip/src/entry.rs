@@ -1,4 +1,4 @@
-use alloc::{boxed::Box, string::String, vec, vec::Vec};
+use alloc::{boxed::Box, vec, vec::Vec};
 use embedded_io::{Read, Seek, SeekFrom};
 use miniz_oxide::{
     DataFormat, MZFlush,
@@ -9,9 +9,26 @@ use zerocopy::FromBytes;
 use crate::ZipError;
 
 pub struct ZipFileEntry {
-    pub name: String,
+    /// crc32 of the name
+    pub name_hash: u32,
+    /// uncompressed size
     pub size: u32,
+    /// offset to the local file header
     pub(crate) offset: u32,
+}
+
+impl ZipFileEntry {
+    pub const fn new(name: &str, size: u32, offset: u32) -> Self {
+        Self {
+            name_hash: Self::hash(name),
+            size,
+            offset,
+        }
+    }
+
+    pub const fn hash(name: &str) -> u32 {
+        const_crc32::crc32(name.as_bytes())
+    }
 }
 
 #[repr(C, packed)]

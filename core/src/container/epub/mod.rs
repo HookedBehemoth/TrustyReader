@@ -22,7 +22,8 @@ impl FileResolver {
         self.file_idx(&full_path)
     }
     pub fn file_idx(&self, path: &str) -> Option<u16> {
-        let idx = self.entries.iter().position(|e| e.name == path)?;
+        let hash = zip::ZipFileEntry::hash(path);
+        let idx = self.entries.iter().position(|e| e.name_hash == hash)?;
         Some(idx as u16)
     }
     pub fn content(&self, path: &str) -> Option<&zip::ZipFileEntry> {
@@ -30,7 +31,8 @@ impl FileResolver {
         self.file(&full_path)
     }
     pub fn file(&self, path: &str) -> Option<&zip::ZipFileEntry> {
-        self.entries.iter().find(|e| e.name == path)
+        let hash = zip::ZipFileEntry::hash(path);
+        self.entries.iter().find(|e| e.name_hash == hash)
     }
     pub fn entry(&self, idx: u16) -> Option<&zip::ZipFileEntry> {
         self.entries.get(idx as usize)
@@ -82,7 +84,7 @@ pub fn parse_chapter(epub: &Epub, index: usize, file: &mut impl File) -> Result<
     };
     info!("Chapter title: {:?}", title);
     let entry = epub.file_resolver.entry(chapter.file_idx).unwrap();
-    info!("Chapter file entry: {}", entry.name);
+    info!("Chapter file entry: {}", entry.name_hash);
     let reader = ZipEntryReader::new(file, entry)?;
 
     spine::parse(title, reader, entry.size as usize, Some(&epub.stylesheet))

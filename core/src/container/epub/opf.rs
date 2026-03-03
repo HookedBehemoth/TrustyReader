@@ -109,11 +109,11 @@ pub fn parse(file: &mut impl File, file_resolver: FileResolver, rootfile: &str) 
         };
 
         let Ok(reader) = ZipEntryReader::new(file, entry) else {
-            log::error!("Failed to read stylesheet entry: {}", entry.name);
+            log::error!("Failed to read stylesheet entry: {}", entry.name_hash);
             return sheet;
         };
         let Some(text) = reader.read_to_end().ok().and_then(|bytes| String::from_utf8(bytes).ok()) else {
-            log::error!("Failed to read stylesheet content: {}", entry.name);
+            log::error!("Failed to read stylesheet content: {}", entry.name_hash);
             return sheet;
         };
         sheet.extend_from_sheet(&text);

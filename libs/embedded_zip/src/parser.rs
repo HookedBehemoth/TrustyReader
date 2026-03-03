@@ -1,5 +1,5 @@
 use crate::{ZipError, ZipFileEntry};
-use alloc::{boxed::Box, string::String, vec, vec::Vec};
+use alloc::{boxed::Box, vec::Vec};
 use embedded_io::{Read, Seek, SeekFrom};
 use memchr::memmem;
 use zerocopy::FromBytes;
@@ -59,7 +59,9 @@ where
     reader
         .seek(SeekFrom::End(-seek_start))
         .map_err(ZipError::from_io_error)?;
-    reader.read_exact(&mut buf).map_err(ZipError::from_read_exact_error)?;
+    reader
+        .read_exact(&mut buf)
+        .map_err(ZipError::from_read_exact_error)?;
 
     let sz = core::mem::size_of::<EndCentralDir>();
     let Some(idx) = memmem::rfind(&buf[..buf.len() - sz + 4], &END_CENTRAL_DIR_MAGIC) else {
@@ -80,7 +82,10 @@ where
         return Err(ZipError::InvalidData);
     }
 
-    let mut entries = Vec::with_capacity(entry_count);
+    let mut entries = Vec::new();
+    entries
+        .try_reserve_exact(entry_count)
+        .map_err(|_| ZipError::OutOfMemory)?;
     reader
         .seek(SeekFrom::Start(dir.central_dir_offset as u64))
         .map_err(ZipError::from_io_error)?;
@@ -94,25 +99,33 @@ where
             return Err(ZipError::InvalidSignature);
         }
 
-        let mut name_buf = vec![0u8; cde.filename_len as usize];
+        const MAX_FILENAME: usize = 512;
+        let filename_len = cde.filename_len as usize;
+        if filename_len > MAX_FILENAME {
+            let offset = cde.filename_len + cde.extra_len + cde.comment_len;
+            reader
+                .seek(SeekFrom::Current(offset as _))
+                .map_err(ZipError::from_io_error)?;
+            continue;
+        }
+        let mut name_buf = [0u8; MAX_FILENAME];
         reader
-            .read_exact(&mut name_buf)
+            .read_exact(&mut name_buf[..filename_len])
             .map_err(ZipError::from_read_exact_error)?;
 
-        // Skip extra and comment
-        reader
-            .seek(SeekFrom::Current(cde.extra_len as _))
-            .map_err(ZipError::from_io_error)?;
-        reader
-            .seek(SeekFrom::Current(cde.comment_len as _))
-            .map_err(ZipError::from_io_error)?;
-        let name = String::from_utf8(name_buf).map_err(|_| ZipError::InvalidData)?;
-        let entry = ZipFileEntry {
-            name,
-            size: cde.uncompressed_size,
-            offset: cde.local_header_offset,
-        };
+        let name = str::from_utf8(name_buf[..filename_len].trim_ascii())
+            .map_err(|_| ZipError::InvalidData)?;
+        let entry = ZipFileEntry::new(name, cde.uncompressed_size, cde.local_header_offset);
         entries.push(entry);
+
+        #[cfg(feature = "log")]
+        log::info!("Parsed ZIP entry: {} (hash: {})", name, entry.name_hash);
+
+        // Skip extra and comment
+        let offset = cde.extra_len + cde.comment_len;
+        reader
+            .seek(SeekFrom::Current(offset as _))
+            .map_err(ZipError::from_io_error)?;
     }
 
     Ok(entries.into_boxed_slice())

@@ -1,7 +1,7 @@
 use std::{collections::HashMap, env::args, path::PathBuf};
 
 use log::{error, info, trace};
-use trusty_core::fs::Filesystem;
+use trusty_core::{container::epub, fs::Filesystem};
 use embedded_xml as xml;
 use embedded_zip as zip;
 
@@ -20,15 +20,10 @@ fn main() {
 fn test_file(path: &str) {
     let fs = StdFilesystem::new_with_base_path(PathBuf::from(""));
     let mut file = fs.open_file(&path, trusty_core::fs::Mode::Read).unwrap();
-    let entries = zip::parse_zip(&mut file).unwrap();
+    let epub = epub::parse(&mut file).unwrap();
     let mut max_text_size = 0;
-    for entry in entries {
-        let xml_names = &[".opf", ".ncx", ".xml", ".xhtml", ".html"];
-        info!("Entry: {}", entry.name);
-        if !xml_names.iter().any(|ext| entry.name.ends_with(ext)) {
-            continue;
-        }
-        info!("Found XML file: {}", entry.name);
+    for entry in epub.spine {
+        let entry = epub.file_resolver.entry(entry.file_idx).unwrap();
         let mut zip_entry = zip::ZipEntryReader::new(&mut file, &entry).unwrap();
         let mut parser = xml::Reader::new(&mut zip_entry, entry.size as _, 4096).unwrap();
         let mut counts = HashMap::new();
