@@ -170,3 +170,14 @@ pub enum Format {
     Jpeg,
     Png,
 }
+
+impl Format {
+    pub fn guess_from_filename(filename: &str) -> Option<Self> {
+        if let Some(pos) = filename.rfind('.') {
+            let ext = &filename[pos + 1..];
+            get_format(ext)
+        } else {
+            None
+        }
+    }
+}

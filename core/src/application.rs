@@ -149,8 +149,7 @@ where
             ActivityType::Settings => Box::new(SettingsActivity::new()),
             ActivityType::Demo => Box::new(DemoActivity::new()),
             ActivityType::Reader { path } => {
-                let ext = path.rsplit('.').next().unwrap_or(path);
-                if let Some(format) = image::get_format(ext) {
+                if let Some(format) = image::Format::guess_from_filename(path) {
                     Box::new(ImageViewerActivity::new(filesystem, path, format))
                 } else {
                     Box::new(ReaderActivity::new(filesystem.clone(), path))

@@ -118,8 +118,10 @@ pub fn parse_image(epub: &Epub, key: u16, max: (u16, u16), file: &mut impl File)
     info!("Loading image with key {} from EPUB", key);
     let entry = epub.file_resolver.entry(key).ok_or(error::EpubError::InvalidState)?;
     info!("Image file entry: {}", entry.name);
+    // TODO: use mime type from manifest, maybe Vec<Option<Format>>
+    let format = image::Format::guess_from_filename(&entry.name).ok_or(error::EpubError::InvalidFormat)?;
     let mut reader = ZipEntryReader::new(file, entry)?;
-    let img = image::decode(image::Format::Jpeg, &mut reader, entry.size, max.0, max.1)
+    let img = image::decode(format, &mut reader, entry.size, max.0, max.1)
         .unwrap();
     Ok(img)
 }
