@@ -6,7 +6,7 @@ use log::trace;
 
 use crate::{
     container::{
-        book::{Chapter, Paragraph},
+        book::{Chapter, Paragraph, Text},
         css,
     },
     layout,
@@ -14,11 +14,26 @@ use crate::{
 };
 use embedded_xml as xml;
 
+pub struct SpineFileResolver<'a> {
+    pub path: &'a str,
+    pub file_resolver: &'a super::FileResolver,
+}
+
+impl SpineFileResolver<'_> {
+    fn content_idx(&self, path: &str) -> Option<u16> {
+        // TODO: path should be relative to self.path
+        let path = path.trim_start_matches("../").trim_start_matches("./");
+        let full_path: heapless::String<256> = heapless::format!("{}{}", self.path, path).ok()?;
+        self.file_resolver.content_idx(&full_path)
+    }
+}
+
 pub fn parse<R: embedded_io::Read>(
     title: Option<String>,
     reader: R,
     size: usize,
     extern_stylesheet: Option<&css::Stylesheet>,
+    file_resolver: Option<SpineFileResolver>,
 ) -> super::Result<Chapter> {
     // TODO: Ensure this is XHTML here or while parsing?
     let mut parser = xml::Reader::new(reader, size as _, 8096)?;
@@ -34,7 +49,12 @@ pub fn parse<R: embedded_io::Read>(
                 inline_stylesheet = parse_head(&mut parser)?;
             }
             xml::Event::StartElement { name: "body", .. } => {
-                paragraphs = parse_body(&mut parser, inline_stylesheet, extern_stylesheet)?;
+                paragraphs = parse_body(
+                    &mut parser,
+                    inline_stylesheet,
+                    extern_stylesheet,
+                    file_resolver,
+                )?;
                 break;
             }
             xml::Event::EndOfFile => break,
@@ -76,6 +96,7 @@ fn parse_body<R: embedded_io::Read>(
     reader: &mut xml::OwnedReader<R>,
     inline_stylesheet: css::Stylesheet,
     extern_stylesheet: Option<&css::Stylesheet>,
+    file_resolver: Option<SpineFileResolver>,
 ) -> super::Result<Vec<Paragraph>> {
     let mut parser = BodyParser::new();
 
@@ -97,6 +118,24 @@ fn parse_body<R: embedded_io::Read>(
         trace!("XML event: {:?}", event);
         match event {
             xml::Event::EndElement { name: "body" } => break,
+            xml::Event::StartElement { name, attrs } if name == "img" || name == "image" => {
+                let src_attr = if name == "img" { "src" } else { "xlink:href" };
+                let Some(src) = attrs.get(src_attr) else {
+                    continue;
+                };
+                log::info!("Found image with {}: {}", src_attr, src);
+                let Some(resolver) = &file_resolver else {
+                    continue;
+                };
+                let Some(idx) = resolver.content_idx(src) else {
+                    continue;
+                };
+                log::info!("Resolved image {} to content index: {}", src_attr, idx);
+                parser.push_image(idx, 0, 0);
+            }
+            xml::Event::StartElement { name: "hr", .. } => {
+                parser.push_hr();
+            }
             xml::Event::StartElement { name, attrs } => {
                 if is_block_element(name) {
                     parser.flush_run();
@@ -106,10 +145,7 @@ fn parse_body<R: embedded_io::Read>(
 
                 let id = attrs.get("id");
                 let class = attrs.get("class");
-                let inline_style = attrs
-                    .get("style")
-                    .map(css::Rule::parse)
-                    .unwrap_or_default();
+                let inline_style = attrs.get("style").map(css::Rule::parse).unwrap_or_default();
                 let style = inline_style
                     + inline_stylesheet.get(name, id, class)
                     + extern_stylesheet
@@ -160,11 +196,11 @@ fn parse_body<R: embedded_io::Read>(
         }
     }
 
-    Ok(parser.into_paragraphs())
+    Ok(parser.into_blocks())
 }
 
 struct BodyParser {
-    paragraphs: Vec<Paragraph>,
+    blocks: Vec<Paragraph>,
     runs: Vec<layout::Run>,
     alignment: Option<layout::Alignment>,
     indent: Option<u16>,
@@ -180,7 +216,7 @@ struct BodyParser {
 impl BodyParser {
     fn new() -> Self {
         Self {
-            paragraphs: Vec::new(),
+            blocks: Vec::new(),
             runs: Vec::new(),
             alignment: None,
             indent: None,
@@ -240,19 +276,29 @@ impl BodyParser {
             if let Some(run) = runs.last_mut() {
                 run.text = run.text.trim_ascii_end().to_string();
             }
-            self.paragraphs.push(Paragraph {
+            self.blocks.push(Paragraph::Text(Text {
                 runs,
                 indent: self.indent,
                 alignment: self.alignment,
-            });
+            }));
             self.indent = None;
             self.alignment = None;
         }
     }
 
-    fn into_paragraphs(mut self) -> Vec<Paragraph> {
+    fn push_image(&mut self, key: u16, width: u16, height: u16) {
         self.flush_run();
-        self.paragraphs
+        self.blocks.push(Paragraph::Image { key, width, height });
+    }
+
+    fn push_hr(&mut self) {
+        self.flush_run();
+        self.blocks.push(Paragraph::Hr);
+    }
+
+    fn into_blocks(mut self) -> Vec<Paragraph> {
+        self.flush_run();
+        self.blocks
     }
 
     fn push_text(&mut self, text: &str) {
@@ -290,11 +336,15 @@ impl BodyParser {
         if self.depth > 0 {
             self.depth -= 1;
         }
-        if let Some(italic_depth) = self.italic_depth && self.depth < italic_depth {
+        if let Some(italic_depth) = self.italic_depth
+            && self.depth < italic_depth
+        {
             self.set_italic(false);
             self.italic_depth = None;
         }
-        if let Some(bold_depth) = self.bold_depth && self.depth < bold_depth{
+        if let Some(bold_depth) = self.bold_depth
+            && self.depth < bold_depth
+        {
             self.set_bold(false);
             self.bold_depth = None;
         }
@@ -306,7 +356,7 @@ impl BodyParser {
 mod test {
     use alloc::string::ToString;
 
-    use crate::{layout::Run, res::font::FontStyle};
+    use crate::{container::book, layout::Run, res::font::FontStyle};
 
     #[test]
     fn inline_styles() {
@@ -317,9 +367,10 @@ mod test {
                 <p>Text with <i>Inline</i> styles <b>bold</b>, <em>emphasized</em> or <i>italic</i></p>
             </body>
         </html>"#;
-        let chapter = super::parse(None, body.as_bytes(), body.len(), None).unwrap();
+        let chapter = super::parse(None, body.as_bytes(), body.len(), None, None).unwrap();
         assert_eq!(chapter.paragraphs.len(), 1);
-        let mut runs = chapter.paragraphs[0].runs.iter();
+        let book::Paragraph::Text(text) = &chapter.paragraphs[0] else { panic!("Expected text block"); };
+        let mut runs = text.runs.iter();
         assert_eq!(runs.next().unwrap(), &Run { text: "Text with ".to_string(), style: FontStyle::Regular, breaking: false });
         assert_eq!(runs.next().unwrap(), &Run { text: "Inline".to_string(), style: FontStyle::Italic, breaking: false });
         assert_eq!(runs.next().unwrap(), &Run { text: " styles ".to_string(), style: FontStyle::Regular, breaking: false });
@@ -345,11 +396,11 @@ mod test {
                 </p>
             </body>
         </html>"#;
-        let chapter = super::parse(None, body.as_bytes(), body.len(), None).unwrap();
+        let chapter = super::parse(None, body.as_bytes(), body.len(), None, None).unwrap();
         assert_eq!(chapter.paragraphs.len(), 1);
-        let paragraph = &chapter.paragraphs[0];
-        assert_eq!(paragraph.runs.len(), 1);
-        let run = &paragraph.runs[0];
+        let book::Paragraph::Text(text) = &chapter.paragraphs[0] else { panic!("Expected text block"); };
+        assert_eq!(text.runs.len(), 1);
+        let run = &text.runs[0];
         assert_eq!(run.text, "Text with White space before and afterSpans");
     }
 
@@ -362,11 +413,11 @@ mod test {
                 <p>We support &quot;&amp;amp;&quot; escaping now!!!</p>
             </body>
         </html>"#;
-        let chapter = super::parse(None, body.as_bytes(), body.len(), None).unwrap();
+        let chapter = super::parse(None, body.as_bytes(), body.len(), None, None).unwrap();
         assert_eq!(chapter.paragraphs.len(), 1);
-        let paragraph = &chapter.paragraphs[0];
-        assert_eq!(paragraph.runs.len(), 1);
-        let run = &paragraph.runs[0];
+        let book::Paragraph::Text(text) = &chapter.paragraphs[0] else { panic!("Expected text block"); };
+        assert_eq!(text.runs.len(), 1);
+        let run = &text.runs[0];
         assert_eq!(run.text, "We support \"&amp;\" escaping now!!!");
     }
 }

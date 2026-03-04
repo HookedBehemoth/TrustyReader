@@ -14,6 +14,8 @@ pub enum EpubError {
     XmlError(xml::Error),
     FileMissing(RequiredFileTypes),
     InvalidData,
+    InvalidState,
+    InvalidFormat,
 }
 
 impl From<ZipError> for EpubError {

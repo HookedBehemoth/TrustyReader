@@ -3,9 +3,9 @@ use alloc::string::ToString;
 use crate::{container::book, layout, res::font};
 
 pub fn from_str(text: &str) -> book::Chapter {
-    let paragraphs = text
+    let blocks = text
         .split("\n\n")
-        .map(|p| book::Paragraph {
+        .map(|p| book::Paragraph::Text(book::Text {
             runs: p
                 .split("\n")
                 .map(|line| layout::Run {
@@ -16,7 +16,7 @@ pub fn from_str(text: &str) -> book::Chapter {
                 .collect(),
             alignment: None,
             indent: None,
-        })
+        }))
         .collect();
-    book::Chapter { title: None, paragraphs }
+    book::Chapter { title: None, paragraphs: blocks }
 }

@@ -1,17 +1,18 @@
-use embedded_io::SeekFrom;
+use embedded_io::{Read, Seek, SeekFrom};
 use log::info;
+use zerocopy::{FromBytes, Immutable, IntoBytes};
 
 use crate::{fs::File, res::font};
 
 const TBMP_MAGIC: &[u8; 4] = b"TBMP";
 
 #[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, FromBytes, IntoBytes, Immutable)]
 pub struct Header {
     pub magic: [u8; 4],
     pub width: u16,
     pub height: u16,
-    pub background: Background,
+    pub background: u32,
 }
 
 impl Header {
@@ -41,8 +42,10 @@ impl Error {
 
 type Result<T> = core::result::Result<T, Error>;
 
-pub fn parse_header(file: &mut impl File) -> Result<Header> {
-    let header = unsafe { file.read_sized::<Header>().map_err(Error::from)? };
+pub fn parse_header<R: Read + Seek>(file: &mut R) -> Result<Header> {
+    let mut header_bytes = [0u8; core::mem::size_of::<Header>()];
+    file.read(&mut header_bytes).map_err(Error::from)?;
+    let header = Header::read_from_bytes(&header_bytes).unwrap();
     if &header.magic != TBMP_MAGIC {
         return Err(Error::InvalidFormat);
     }
@@ -88,9 +91,9 @@ pub fn write(
         magic: *TBMP_MAGIC,
         width,
         height,
-        background,
+        background: background as _,
     };
-    unsafe { file.write_sized(&header).map_err(Error::from)? };
+    file.write_all(&header.as_bytes()).map_err(Error::from)?;
     file.write_all(bw).map_err(Error::from)?;
     file.write_all(msb).map_err(Error::from)?;
     file.write_all(lsb).map_err(Error::from)?;

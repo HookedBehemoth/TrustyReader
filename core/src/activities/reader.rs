@@ -9,7 +9,7 @@ use embedded_io::Write;
 use log::{info, warn};
 
 use crate::{
-    container::book, display::RefreshMode, framebuffer::DisplayBuffers, fs::File, input::Buttons, layout, res::font
+    container::{book, image}, display::RefreshMode, framebuffer::DisplayBuffers, fs::File, input::Buttons, layout, res::font
 };
 
 const BASE_PATH: &str = ".trusty";
@@ -254,16 +254,28 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
             return;
         }
         let last_para = chapter.paragraphs.len() - 1;
-        let lines = self.layout_text(options, &chapter.paragraphs[last_para]);
-        // Try to show the last 10 lines
-        // NOTE: unless we lay out the entire chapter, there doesn't seem to be a sane way of getting
-        // the correct line number. Fill the entire page :(
-        self.progress.start = self.compute_prev_page(
-            &chapter,
-            Progress { paragraph: last_para as u16, line: lines.len() as u16 },
-            options,
-            page_height,
-        ).unwrap_or(Progress { paragraph: last_para as u16, line: 0 });
+        match &chapter.paragraphs[last_para] {
+            book::Paragraph::Text(text) => {
+                let lines = self.layout_text(options, text);
+                // Try to show the last 10 lines
+                // NOTE: unless we lay out the entire chapter, there doesn't seem to be a sane way of getting
+                // the correct line number. Fill the entire page :(
+                self.progress.start = self.compute_prev_page(
+                    &chapter,
+                    Progress { paragraph: last_para as u16, line: lines.len() as u16 },
+                    options,
+                    page_height,
+                ).unwrap_or(Progress { paragraph: last_para as u16, line: 0 });
+            }
+            book::Paragraph::Image { .. } => {
+                // Can't do much with an image, just start at the beginning of the chapter
+                self.progress.start = Progress { paragraph: 0, line: 0 };
+            }
+            book::Paragraph::Hr => {
+                // Just display the HR line
+                self.progress.start = Progress { paragraph: 0, line: 0 };
+            }
+        }
         self.chapter = Some(chapter);
     }
 
@@ -304,8 +316,6 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
         let at_line = if cur_line > 0 { cur_line } else { usize::MAX };
 
         loop {
-            let paragraph = &chapter.paragraphs[para_idx];
-
             // Add paragraph spacing (between paragraphs, not before the bottom-most)
             if !first_iter {
                 if remaining < para_spacing {
@@ -316,37 +326,54 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
             }
             first_iter = false;
 
-            if paragraph.runs.is_empty() {
-                result_para = para_idx;
-                result_line = 0;
-                if para_idx == 0 {
-                    break;
+            match &chapter.paragraphs[para_idx] {
+                book::Paragraph::Text(text) => {
+                    if text.runs.is_empty() {
+                        result_para = para_idx;
+                        result_line = 0;
+                        if para_idx == 0 {
+                            break;
+                        }
+                        para_idx -= 1;
+                        continue;
+                    }
+
+                    let para_lines = self.layout_text(options, text);
+                    // How many lines from this paragraph are available
+                    let available = if para_idx == cur_para && at_line != usize::MAX {
+                        at_line
+                    } else {
+                        para_lines.len()
+                    };
+
+                    // Try to fit lines from the end backwards
+                    let mut fitted = 0usize;
+                    for _ in (0..available).rev() {
+                        if remaining < y_advance {
+                            break;
+                        }
+                        remaining -= y_advance;
+                        fitted += 1;
+                    }
+
+                    if fitted > 0 {
+                        result_para = para_idx;
+                        result_line = available - fitted;
+                    }
                 }
-                para_idx -= 1;
-                continue;
-            }
-
-            let para_lines = self.layout_text(options, paragraph);
-            // How many lines from this paragraph are available
-            let available = if para_idx == cur_para && at_line != usize::MAX {
-                at_line
-            } else {
-                para_lines.len()
-            };
-
-            // Try to fit lines from the end backwards
-            let mut fitted = 0usize;
-            for _ in (0..available).rev() {
-                if remaining < y_advance {
-                    break;
+                book::Paragraph::Image { width: raw_w, height: raw_h, .. } => {
+                    let (_, img_h) = image::scaled_size(*raw_w, *raw_h, options.width, page_height);
+                    if img_h > remaining {
+                        break;
+                    }
+                    result_para = para_idx;
+                    result_line = 0;
+                    remaining -= img_h;
                 }
-                remaining -= y_advance;
-                fitted += 1;
-            }
-
-            if fitted > 0 {
-                result_para = para_idx;
-                result_line = available - fitted;
+                book::Paragraph::Hr => {
+                    result_para = para_idx;
+                    result_line = 0;
+                }
             }
 
             if remaining < y_advance {
@@ -367,10 +394,10 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
         })
     }
 
-    fn layout_text<'a>(&self, options: layout::Options, paragraph: &'a book::Paragraph) -> Vec<layout::Line<'a>> {
-        let alignment = paragraph.alignment.unwrap_or(self.alignment);
-        let indent = paragraph.indent.unwrap_or(self.indent);
-        layout::layout_text(options, alignment, indent, &paragraph.runs)
+    fn layout_text<'a>(&self, options: layout::Options, text: &'a book::Text) -> Vec<layout::Line<'a>> {
+        let alignment = text.alignment.unwrap_or(self.alignment);
+        let indent = text.indent.unwrap_or(self.indent);
+        layout::layout_text(options, alignment, indent, &text.runs)
     }
 
     fn display_settings(&self, buffers: &mut DisplayBuffers) {
@@ -566,6 +593,18 @@ impl<Filesystem: crate::fs::Filesystem> super::Activity for ReaderActivity<Files
     }
 
     fn draw(&mut self, display: &mut dyn crate::display::Display, buffers: &mut DisplayBuffers) {
+        if self.book.is_none() {
+            warn!("No book loaded");
+
+            buffers.clear(BinaryColor::On).ok();
+
+            Text::new("failed to load book", Point::new(10, 30), MonoTextStyle::new(&FONT_10X20, BinaryColor::Off))
+                .draw(buffers)
+                .ok();
+
+            display.display(buffers, RefreshMode::Fast);
+            return;
+        };
         let Some(chapter) = &self.chapter else {
             warn!("No chapter");
 
@@ -605,54 +644,83 @@ impl<Filesystem: crate::fs::Filesystem> super::Activity for ReaderActivity<Files
         let start_line = self.progress.start.line as usize;
 
         let mut all_lines: Vec<layout::Line> = Vec::new();
+        let mut images: Vec<layout::Image> = Vec::new();
         let mut y_offsets: Vec<u16> = Vec::new();
         let mut end_paragraph = start_paragraph;
         let mut end_line: usize = 0;
         let mut y_cursor: u16 = 0;
+        let mut has_content = false;
 
         'outer: for para_idx in start_paragraph..chapter.paragraphs.len() {
-            let paragraph = &chapter.paragraphs[para_idx];
 
             // Add paragraph spacing before each paragraph (except the first on the page)
             if para_idx > start_paragraph || start_line == 0 {
-                if !all_lines.is_empty() {
+                if has_content {
                     y_cursor += para_spacing;
                 }
             }
 
-            if paragraph.runs.is_empty() {
-                end_paragraph = para_idx + 1;
-                end_line = 0;
-                continue;
-            }
+            match &chapter.paragraphs[para_idx] {
+                book::Paragraph::Text(text) => {
+                    if text.runs.is_empty() {
+                        end_paragraph = para_idx + 1;
+                        end_line = 0;
+                        continue;
+                    }
 
-            let alignment = paragraph.alignment.unwrap_or(self.alignment);
-            let indent = paragraph.indent.unwrap_or(self.indent);
-            let para_lines = layout::layout_text(options, alignment, indent, &paragraph.runs);
-            let skip = if para_idx == start_paragraph { start_line } else { 0 };
+                    let alignment = text.alignment.unwrap_or(self.alignment);
+                    let indent = text.indent.unwrap_or(self.indent);
+                    let para_lines = layout::layout_text(options, alignment, indent, &text.runs);
+                    let skip = if para_idx == start_paragraph { start_line } else { 0 };
 
-            for (line_idx, line) in para_lines.into_iter().enumerate() {
-                if line_idx < skip {
-                    continue;
+                    for (line_idx, line) in para_lines.into_iter().enumerate() {
+                        if line_idx < skip {
+                            continue;
+                        }
+
+                        if y_cursor + y_advance > page_height {
+                            end_paragraph = para_idx;
+                            end_line = line_idx;
+                            break 'outer;
+                        }
+
+                        y_offsets.push(y_cursor);
+                        all_lines.push(line);
+                        y_cursor += y_advance;
+                        has_content = true;
+                        end_paragraph = para_idx;
+                        end_line = line_idx + 1;
+                    }
+
+                    // Finished this paragraph entirely
+                    if end_paragraph == para_idx {
+                        end_paragraph = para_idx + 1;
+                        end_line = 0;
+                    }
                 }
-
-                if y_cursor + y_advance > page_height {
-                    end_paragraph = para_idx;
-                    end_line = line_idx;
-                    break 'outer;
+                book::Paragraph::Image { key, width: raw_w, height: raw_h } => {
+                    let (_, img_h) = image::scaled_size(*raw_w, *raw_h, options.width as _, page_height as _);
+                    if y_cursor + img_h > page_height {
+                        end_paragraph = para_idx;
+                        end_line = 0;
+                        break 'outer;
+                    }
+                    images.push(layout::Image {
+                        key: *key,
+                        width: *raw_w,
+                        height: *raw_h,
+                        y_offset: y_cursor,
+                    });
+                    y_cursor += img_h;
+                    has_content = true;
+                    end_paragraph = para_idx + 1;
+                    end_line = 0;
                 }
-
-                y_offsets.push(y_cursor);
-                all_lines.push(line);
-                y_cursor += y_advance;
-                end_paragraph = para_idx;
-                end_line = line_idx + 1;
-            }
-
-            // Finished this paragraph entirely
-            if end_paragraph == para_idx {
-                end_paragraph = para_idx + 1;
-                end_line = 0;
+                book::Paragraph::Hr => {
+                    // TODO
+                    end_paragraph = para_idx + 1;
+                    end_line = 0;
+                }
             }
         }
 
@@ -663,6 +731,13 @@ impl<Filesystem: crate::fs::Filesystem> super::Activity for ReaderActivity<Files
 
         buffers.clear(BinaryColor::On).ok();
         self.draw_layed_out_text(font, &all_lines, &y_offsets, x_start, y_start, font::Mode::Bw, buffers);
+        // Decode and draw images during the BW render pass
+        for img in &images {
+            let book = self.book.as_ref().unwrap();
+            if let Some(decoded) = book.image(img.key, (options.width, page_height), &mut self.file) {
+                decoded.blit_bw(&mut self.file, img.y_offset, buffers);
+            }
+        }
         self.display_settings(buffers);
         self.display_footer(buffers);
         display.display(buffers, RefreshMode::Fast);

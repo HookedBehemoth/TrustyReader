@@ -5,14 +5,14 @@ use crate::{
     container::image::{self, Format},
     display::{Display, RefreshMode},
     framebuffer::{DisplayBuffers, Rotation},
-    fs,
+    fs::{self, File},
     input::Buttons,
     res::font::Mode,
 };
 
 pub struct ImageViewerActivity<Filesystem: fs::Filesystem> {
     format: Format,
-    image: Option<image::Image>,
+    image: Option<Result<image::Image, &'static str>>,
     file: Option<Filesystem::File>,
 }
 
@@ -29,7 +29,14 @@ impl<Filesystem: fs::Filesystem> ImageViewerActivity<Filesystem> {
         };
         file.seek(embedded_io::SeekFrom::Start(0)).ok();
         let sz = rotation.size();
-        self.image = image::decode(self.format, file, sz.width as _, sz.height as _).ok();
+        let file_size = file.size() as _;
+        self.image = match image::decode(self.format, file, file_size, sz.width as _, sz.height as _) {
+            Ok(img) => Some(Ok(img)),
+            Err(e) => {
+                log::error!("Failed to decode image: {}", e);
+                Some(Err(e))
+            },
+        }
     }
 }
 
@@ -39,22 +46,22 @@ impl<Filesystem: fs::Filesystem> super::Activity for ImageViewerActivity<Filesys
         let Some(file) = &mut self.file else {
             return;
         };
-        let Some(image) = &self.image else {
+        let Some(Ok(image)) = &self.image else {
             return;
         };
         log::info!("Blitting image to display");
 
         buffers.clear_screen(0xFF);
-        image.blit_bw(file, buffers);
+        image.blit_bw(file, 0, buffers);
         display.display(buffers, RefreshMode::Fast);
 
         if image.has_grayscale() {
             buffers.clear_screen(0x00);
-            image.blit_gray(file, Mode::Msb, buffers);
+            image.blit_gray(file, 0, Mode::Msb, buffers);
             display.copy_to_msb(buffers.get_active_buffer());
 
             buffers.clear_screen(0x00);
-            image.blit_gray(file, Mode::Lsb, buffers);
+            image.blit_gray(file, 0, Mode::Lsb, buffers);
             display.copy_to_lsb(buffers.get_active_buffer());
             display.display_differential_grayscale(false);
         }

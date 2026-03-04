@@ -1,7 +1,8 @@
 use alloc::{borrow::ToOwned, boxed::Box, string::String, vec::Vec};
 use log::info;
 
-use crate::{container::css, fs::File, zip::{self, ZipEntryReader}};
+use crate::{container::{css, image}, fs::File, zip::{self, ZipEntryReader}};
+use super::book;
 
 pub mod container;
 pub mod error;
@@ -87,5 +88,35 @@ pub fn parse_chapter(epub: &Epub, index: usize, file: &mut impl File) -> Result<
     info!("Chapter file entry: {}", entry.name_hash);
     let reader = ZipEntryReader::new(file, entry)?;
 
-    spine::parse(title, reader, entry.size as usize, Some(&epub.stylesheet))
+    let resolver = spine::SpineFileResolver { path: "", file_resolver: &epub.file_resolver };
+    let mut chapter = spine::parse(title, reader, entry.size as usize, Some(&epub.stylesheet), Some(resolver))?;
+
+    // Resolve image sizes now that the XHTML reader has released the file
+    for para in &mut chapter.paragraphs {
+        if let book::Paragraph::Image { key, width, height } = para {
+            if let Ok(size) = read_image_size(epub, *key, file) {
+                *width = size.0;
+                *height = size.1;
+            }
+        }
+    }
+
+    Ok(chapter)
+}
+
+pub fn read_image_size(epub: &Epub, key: u16, file: &mut impl File) -> Result<(u16, u16)> {
+    let entry = epub.file_resolver.entry(key).ok_or(error::EpubError::InvalidState)?;
+    let mut reader = ZipEntryReader::new(file, entry)?;
+    image::read_size(&mut reader, entry.size)
+        .map_err(|_| error::EpubError::InvalidData)
+}
+
+pub fn parse_image(epub: &Epub, key: u16, max: (u16, u16), file: &mut impl File) -> Result<image::Image> {
+    info!("Loading image with key {} from EPUB", key);
+    let entry = epub.file_resolver.entry(key).ok_or(error::EpubError::InvalidState)?;
+    info!("Image file entry: {}", entry.name_hash);
+    let mut reader = ZipEntryReader::new(file, entry)?;
+    let img = image::decode(image::Format::Jpeg, &mut reader, entry.size, max.0, max.1)
+        .unwrap();
+    Ok(img)
 }

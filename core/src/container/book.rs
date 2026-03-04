@@ -5,7 +5,7 @@ use alloc::{
 use log::info;
 
 use super::{epub, markdown, plaintext, xml, css};
-use crate::{fs::{self, File, Filesystem}, layout};
+use crate::{container::image, fs::{self, File, Filesystem}, layout};
 
 enum BookFormat {
     PlainText(String, String),
@@ -28,10 +28,16 @@ pub struct Chapter {
     pub paragraphs: Vec<Paragraph>,
 }
 
-pub struct Paragraph {
+pub struct Text {
     pub runs: Vec<layout::Run>,
     pub alignment: Option<layout::Alignment>,
     pub indent: Option<u16>,
+}
+
+pub enum Paragraph {
+    Text(Text),
+    Image { key: u16, width: u16, height: u16 },
+    Hr,
 }
 
 impl Book {
@@ -116,9 +122,16 @@ impl Book {
             BookFormat::Html(_, text, stylesheet) => Chapter::from_html(text, stylesheet.as_ref()),
             BookFormat::Xml(_, text) => xml::from_str(text),
             BookFormat::Xhtml(_, text, stylesheet) => {
-                epub::spine::parse(None, text.as_bytes(), size, stylesheet.as_ref()).ok()
+                epub::spine::parse(None, text.as_bytes(), size, stylesheet.as_ref(), None).ok()
             }
             BookFormat::Epub(epub) => epub::parse_chapter(epub, index, file).ok(),
+        }
+    }
+
+    pub fn image(&self, key: u16, max: (u16, u16), file: &mut impl File) -> Option<image::Image> {
+        match &self.format {
+            BookFormat::Epub(epub) => epub::parse_image(epub, key, max, file).ok(),
+            _ => None,
         }
     }
 
@@ -156,7 +169,7 @@ const UNSAFE_CHARS: &[char] = &['/', '\\', '?', '%', '*', ':', '|', '"', '<', '>
 impl Chapter {
     fn from_html(text: &str, stylesheet: Option<&css::Stylesheet>) -> Option<Self> {
         if text.contains("<?xml") {
-            epub::spine::parse(None, text.as_bytes(), text.len(), stylesheet).ok()
+            epub::spine::parse(None, text.as_bytes(), text.len(), stylesheet, None).ok()
         } else {
             Some(plaintext::from_str(text))
         }

@@ -56,6 +56,8 @@ pub struct ZipEntryReader<'a, R> {
     reader: &'a mut R,
     compression: u16,
     offset: u64,
+    compressed_size: usize,
+    uncompressed_size: usize,
     compressed_remaining: usize,
     uncompressed_remaining: usize,
     // Inflate state for deflate decompression
@@ -111,6 +113,8 @@ impl<'a, R: Read + Seek> ZipEntryReader<'a, R> {
             reader,
             compression,
             offset,
+            compressed_size: lfh.compressed_size as usize,
+            uncompressed_size: lfh.uncompressed_size as usize,
             compressed_remaining: lfh.compressed_size as usize,
             uncompressed_remaining: lfh.uncompressed_size as usize,
             inflater,
@@ -264,10 +268,14 @@ impl<'a, R: Read + Seek> ZipEntryReader<'a, R> {
 
     pub fn reset(&mut self) -> Result<(), ZipError> {
         if let Some(inflater) = self.inflater.as_mut() {
-            inflater.reset(DataFormat::Zlib);
+            inflater.reset(DataFormat::Raw);
         }
         
-        self.reader.seek(SeekFrom::Start(self.offset)).map_err(ZipError::from_io_error)?;
+        self.reader.seek(SeekFrom::Start(self.offset)).unwrap(); //.map_err(ZipError::from_io_error)?;
+        self.compressed_remaining = self.compressed_size;
+        self.uncompressed_remaining = self.uncompressed_size;
+        self.in_buf_start = 0;
+        self.in_buf_end = 0;
         Ok(())
     }
 }

@@ -129,11 +129,14 @@ impl DisplayBuffers {
         }
     }
 
-    pub fn blit(&mut self, src: &[u8], w: u16, h: u16) {
-        let Size { width, height } = self.size();
+    pub fn blit(&mut self, src: &[u8], w: u16, h: u16, offset_y: u16) {
+        let Size { width, .. } = self.size();
+
+        log::info!("Blitting image of size {}x{} to display with rotation {}, offset_y {}", w, h, self.rotation.repr(), offset_y);
 
         let offset_x = (width as i32 - w as i32) / 2;
-        let offset_y = (height as i32 - h as i32) / 2;
+        let offset_y = offset_y as i32;
+        // let offset_y = (height as i32 - h as i32) / 2;
         let stride = w.div_ceil(8) as usize;
 
         for y in 0..h as _ {

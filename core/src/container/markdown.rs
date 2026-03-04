@@ -3,7 +3,7 @@ use alloc::string::ToString;
 use crate::{container::book, layout, res::font};
 
 pub fn from_str(text: &str) -> book::Chapter {
-    let mut paragraphs = alloc::vec![];
+    let mut blocks = alloc::vec![];
 
     for text in text.split("\n\n") {
         let mut runs = alloc::vec![];
@@ -22,12 +22,12 @@ pub fn from_str(text: &str) -> book::Chapter {
             })
         }
 
-        paragraphs.push(book::Paragraph {
+        blocks.push(book::Paragraph::Text(book::Text {
             runs,
             alignment: Some(layout::Alignment::Start),
             indent: Some(0),
-        });
+        }));
     }
 
-    book::Chapter { title: None, paragraphs }
+    book::Chapter { title: None, paragraphs: blocks }
 }

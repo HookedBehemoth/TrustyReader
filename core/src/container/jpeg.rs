@@ -284,6 +284,70 @@ impl<R: embedded_io::Read> BitReader<R> {
 
 // public API
 
+/// Read only the image dimensions from a JPEG without decoding pixel data.
+/// Returns `(width, height)` in pixels.
+pub fn read_jpeg_size<R: embedded_io::Read>(
+    reader: &mut R,
+    data_size: u32,
+) -> Result<(u16, u16), &'static str> {
+    let hdr_size = HEADER_READ.min(data_size as usize);
+    let mut hdr = Vec::new();
+    hdr.try_reserve_exact(hdr_size)
+        .map_err(|_| "jpeg: OOM for header")?;
+    hdr.resize(hdr_size, 0);
+    reader
+        .read_exact(&mut hdr)
+        .map_err(|_| "jpeg: read error for header")?;
+
+    if hdr.len() < 2 || hdr[0] != 0xFF || hdr[1] != M_SOI {
+        return Err("jpeg: invalid signature");
+    }
+    let mut pos = 2usize;
+    let len = hdr.len();
+
+    loop {
+        while pos < len && hdr[pos] != 0xFF {
+            pos += 1;
+        }
+        while pos < len && hdr[pos] == 0xFF {
+            pos += 1;
+        }
+        if pos >= len {
+            return Err("jpeg: truncated");
+        }
+        let marker = hdr[pos];
+        pos += 1;
+
+        match marker {
+            0x00 | M_RST0..=M_RST7 => continue,
+            M_SOF0 | M_SOF2 => {
+                if pos + 2 > len {
+                    return Err("jpeg: SOF truncated");
+                }
+                let seg = be_u16(&hdr, pos) as usize;
+                pos += 2;
+                if seg < 7 || pos + seg - 2 > len {
+                    return Err("jpeg: SOF truncated");
+                }
+                let height = be_u16(&hdr, pos + 1);
+                let width = be_u16(&hdr, pos + 3);
+                return Ok((width, height));
+            }
+            M_SOS | M_EOI => return Err("jpeg: no SOF found"),
+            _ => {
+                if pos + 2 > len {
+                    return Err("jpeg: truncated marker");
+                }
+                let seg = be_u16(&hdr, pos) as usize;
+                if seg < 2 || pos + seg > len {
+                    return Err("jpeg: bad marker length");
+                }
+                pos += seg;
+            }
+        }
+    }
+}
+
 /// Decode a JPEG from a **stored** (uncompressed) ZIP entry by streaming
 /// 4 KB chunks through `read_fn`.
 ///

@@ -2406,6 +2406,7 @@ dependencies = [
  "rotate-enum",
  "strum",
  "strum_macros",
+ "zerocopy",
 ]
 
 [[package]]

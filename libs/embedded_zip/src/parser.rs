@@ -116,10 +116,11 @@ where
         let name = str::from_utf8(name_buf[..filename_len].trim_ascii())
             .map_err(|_| ZipError::InvalidData)?;
         let entry = ZipFileEntry::new(name, cde.uncompressed_size, cde.local_header_offset);
-        entries.push(entry);
 
         #[cfg(feature = "log")]
         log::info!("Parsed ZIP entry: {} (hash: {})", name, entry.name_hash);
+
+        entries.push(entry);
 
         // Skip extra and comment
         let offset = cde.extra_len + cde.comment_len;

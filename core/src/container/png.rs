@@ -52,6 +52,35 @@ const DICT_SIZE: usize = 32_768;
 /// Read-chunk size used by the streaming decoders (bytes).
 const STREAMING_READ_BUF: usize = 4096;
 
+/// Read only the image dimensions from a PNG without decoding pixel data.
+/// Returns `(width, height)` in pixels.
+pub fn read_png_size<R: Read + Seek>(
+    src: &mut R,
+) -> Result<(u16, u16), &'static str> {
+    let mut sig = [0u8; 8];
+    src.read_exact(&mut sig).map_err(|_| "png: failed to read signature")?;
+    if sig != PNG_SIG {
+        return Err("png: invalid signature");
+    }
+
+    let mut chunk_hdr = [0u8; 8];
+    src.read_exact(&mut chunk_hdr).map_err(|_| "png: failed to read IHDR chunk header")?;
+    let ihdr_len = be_u32(&chunk_hdr, 0) as usize;
+    if [chunk_hdr[4], chunk_hdr[5], chunk_hdr[6], chunk_hdr[7]] != CHUNK_IHDR || ihdr_len < 13 {
+        return Err("png: missing or invalid IHDR");
+    }
+    let mut ihdr_raw = [0u8; 13];
+    src.read_exact(&mut ihdr_raw).map_err(|_| "png: failed to read IHDR data")?;
+
+    let width = be_u32(&ihdr_raw, 0);
+    let height = be_u32(&ihdr_raw, 4);
+    if width == 0 || height == 0 {
+        return Err("png: zero dimensions");
+    }
+
+    Ok((width as u16, height as u16))
+}
+
 /// Core streaming PNG decoder; generic over byte source.
 /// Reads chunks sequentially, feeds IDAT into zlib row-by-row;
 /// never holds the full PNG in RAM.
@@ -521,7 +550,7 @@ fn dither_row(
         let quantised = if black { 0i16 } else { 255 };
         let err = val - quantised;
 
-        if black {
+        if !black {
             out_row[ox / 8] |= 1 << (7 - (ox & 7));
         }
 

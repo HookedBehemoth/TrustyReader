@@ -31,10 +31,11 @@ pub fn from_str(text: &str) -> Option<book::Chapter> {
         });
     }
 
-    let paragraph = book::Paragraph {
+    let paragraph = book::Text {
         runs,
         alignment: Some(layout::Alignment::Start),
         indent: Some(0),
     };
-    Some(book::Chapter { title: None, paragraphs: alloc::vec![paragraph] })
+    let blocks = alloc::vec![book::Paragraph::Text(paragraph)];
+    Some(book::Chapter { title: None, paragraphs: blocks })
 }

@@ -60,15 +60,16 @@ pub struct Line<'a> {
     pub hyphenated: bool,
 }
 
-pub struct Image<'a> {
-    pub handle: &'a str,
+pub struct Image {
+    pub key: u16,
     pub width: u16,
     pub height: u16,
+    pub y_offset: u16,
 }
 
 pub enum Block<'a> {
     Text(Vec<Line<'a>>),
-    Image(Image<'a>),
+    Image(Image),
 }
 
 /// Input for layouting.
