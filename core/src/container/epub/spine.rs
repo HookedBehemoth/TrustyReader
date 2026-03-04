@@ -15,7 +15,7 @@ use crate::{
 use embedded_xml as xml;
 
 pub struct SpineFileResolver<'a> {
-    pub path: &'a str,
+    pub folder: &'a str,
     pub file_resolver: &'a super::FileResolver,
 }
 
@@ -23,7 +23,7 @@ impl SpineFileResolver<'_> {
     fn content_idx(&self, path: &str) -> Option<u16> {
         // TODO: path should be relative to self.path
         let path = path.trim_start_matches("../").trim_start_matches("./");
-        let full_path: heapless::String<256> = heapless::format!("{}{}", self.path, path).ok()?;
+        let full_path: heapless::String<256> = heapless::format!("{}{}", self.folder, path).ok()?;
         self.file_resolver.content_idx(&full_path)
     }
 }

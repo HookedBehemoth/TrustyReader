@@ -5,7 +5,6 @@ pub enum ZipError {
     InvalidSignature,
     UnsupportedCompression,
     DecompressionError,
-    OutOfMemory,
     InvalidData,
 }
 
@@ -31,7 +30,6 @@ impl embedded_io::Error for ZipError {
             }
             ZipError::UnsupportedCompression => embedded_io::ErrorKind::Unsupported,
             ZipError::DecompressionError => embedded_io::ErrorKind::Other,
-            ZipError::OutOfMemory => embedded_io::ErrorKind::OutOfMemory,
         }
     }
 }

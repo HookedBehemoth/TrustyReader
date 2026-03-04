@@ -23,8 +23,7 @@ impl FileResolver {
         self.file_idx(&full_path)
     }
     pub fn file_idx(&self, path: &str) -> Option<u16> {
-        let hash = zip::ZipFileEntry::hash(path);
-        let idx = self.entries.iter().position(|e| e.name_hash == hash)?;
+        let idx = self.entries.iter().position(|e| e.name == path)?;
         Some(idx as u16)
     }
     pub fn content(&self, path: &str) -> Option<&zip::ZipFileEntry> {
@@ -32,8 +31,7 @@ impl FileResolver {
         self.file(&full_path)
     }
     pub fn file(&self, path: &str) -> Option<&zip::ZipFileEntry> {
-        let hash = zip::ZipFileEntry::hash(path);
-        self.entries.iter().find(|e| e.name_hash == hash)
+        self.entries.iter().find(|e| e.name == path)
     }
     pub fn entry(&self, idx: u16) -> Option<&zip::ZipFileEntry> {
         self.entries.get(idx as usize)
@@ -85,10 +83,15 @@ pub fn parse_chapter(epub: &Epub, index: usize, file: &mut impl File) -> Result<
     };
     info!("Chapter title: {:?}", title);
     let entry = epub.file_resolver.entry(chapter.file_idx).unwrap();
-    info!("Chapter file entry: {}", entry.name_hash);
+    info!("Chapter file entry: {}", entry.name);
     let reader = ZipEntryReader::new(file, entry)?;
 
-    let resolver = spine::SpineFileResolver { path: "", file_resolver: &epub.file_resolver };
+    let folder = if let Some(pos) = entry.name.rfind('/') {
+        &entry.name[..=pos]
+    } else {
+        ""
+    };
+    let resolver = spine::SpineFileResolver { folder, file_resolver: &epub.file_resolver };
     let mut chapter = spine::parse(title, reader, entry.size as usize, Some(&epub.stylesheet), Some(resolver))?;
 
     // Resolve image sizes now that the XHTML reader has released the file
@@ -114,7 +117,7 @@ pub fn read_image_size(epub: &Epub, key: u16, file: &mut impl File) -> Result<(u
 pub fn parse_image(epub: &Epub, key: u16, max: (u16, u16), file: &mut impl File) -> Result<image::Image> {
     info!("Loading image with key {} from EPUB", key);
     let entry = epub.file_resolver.entry(key).ok_or(error::EpubError::InvalidState)?;
-    info!("Image file entry: {}", entry.name_hash);
+    info!("Image file entry: {}", entry.name);
     let mut reader = ZipEntryReader::new(file, entry)?;
     let img = image::decode(image::Format::Jpeg, &mut reader, entry.size, max.0, max.1)
         .unwrap();

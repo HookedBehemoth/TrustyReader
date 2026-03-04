@@ -15,7 +15,6 @@ log = { workspace = true, optional = true }
 miniz_oxide.workspace = true
 zerocopy = { version = "0.8.40", features = ["derive"] }
 memchr.workspace = true
-const-crc32 = { version = "1.3.0", default-features = false }
 
 [features]
 log = ["dep:log"]
