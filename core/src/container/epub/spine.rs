@@ -20,11 +20,25 @@ pub struct SpineFileResolver<'a> {
 }
 
 impl SpineFileResolver<'_> {
-    fn content_idx(&self, path: &str) -> Option<u16> {
-        // TODO: path should be relative to self.path
-        let path = path.trim_start_matches("../").trim_start_matches("./");
-        let full_path: heapless::String<256> = heapless::format!("{}{}", self.folder, path).ok()?;
-        self.file_resolver.content_idx(&full_path)
+    fn content_idx(&self, mut path: &str) -> Option<u16> {
+        path = path.trim_start_matches("./");
+        let mut back_count = 0;
+        while let Some(p) = path.strip_prefix("../") {
+            path = p;
+            back_count += 1;
+        }
+        let mut folder = self.folder;
+        for _ in 0..back_count {
+            if let Some(pos) = folder[..folder.len().saturating_sub(1)].rfind('/') {
+                folder = &folder[..=pos];
+            } else {
+                folder = "";
+                break;
+            }
+        }
+        let full_path: heapless::String<256> = heapless::format!("{}{}", folder, path).ok()?;
+        log::info!("Resolving spine file with path '{}', folder '{}', back_count {}, full_path '{}'", path, self.folder, back_count, full_path);
+        self.file_resolver.file_idx(&full_path)
     }
 }
 
