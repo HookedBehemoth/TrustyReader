@@ -135,15 +135,21 @@ pub fn read_size<R: Read + Seek>(
 }
 
 /// Compute the scaled output dimensions given raw image size and max bounds.
+/// Uses aspect-ratio-preserving scaling (fits within max_w × max_h).
 pub fn scaled_size(raw_w: u16, raw_h: u16, max_w: u16, max_h: u16) -> (u16, u16) {
-    let scale = {
-        let sw = (raw_w as u32 + max_w as u32 - 1) / max_w as u32;
-        let sh = (raw_h as u32 + max_h as u32 - 1) / max_h as u32;
-        sw.max(sh).max(1)
-    };
-    let out_w = ((raw_w as u32) / scale).max(1) as u16;
-    let out_h = ((raw_h as u32) / scale).max(1) as u16;
-    (out_w, out_h)
+    if raw_w <= max_w && raw_h <= max_h {
+        return (raw_w, raw_h);
+    }
+    // Width-bound when raw_w/max_w > raw_h/max_h (cross-multiply to avoid division)
+    if (raw_w as u32) * (max_h as u32) > (raw_h as u32) * (max_w as u32) {
+        let out_w = max_w;
+        let out_h = ((raw_h as u32) * (max_w as u32) / (raw_w as u32)).max(1) as u16;
+        (out_w, out_h)
+    } else {
+        let out_h = max_h;
+        let out_w = ((raw_w as u32) * (max_h as u32) / (raw_h as u32)).max(1) as u16;
+        (out_w, out_h)
+    }
 }
 
 pub fn get_format(ext: &str) -> Option<Format> {

@@ -416,13 +416,16 @@ fn decode_baseline<R: embedded_io::Read>(
         return Err("jpeg: exceeds pixel limit");
     }
 
-    let scale = {
-        let sw = (w + max_w as usize - 1) / max_w as usize;
-        let sh = (h + max_h as usize - 1) / max_h as usize;
-        sw.max(sh).max(1)
+    let (out_w, out_h) = if w <= max_w as usize && h <= max_h as usize {
+        (w, h)
+    } else if (w as u32) * (max_h as u32) > (h as u32) * (max_w as u32) {
+        (max_w as usize, ((h as u32 * max_w as u32) / w as u32).max(1) as usize)
+    } else {
+        (((w as u32 * max_h as u32) / h as u32).max(1) as usize, max_h as usize)
     };
-    let out_w = (w / scale).max(1);
-    let out_h = (h / scale).max(1);
+    // 16.16 fixed-point step: source pixels per output pixel
+    let x_step: u32 = ((w as u32) << 16) / out_w as u32;
+    let y_step: u32 = ((h as u32) << 16) / out_h as u32;
     let out_stride = out_w.div_ceil(8);
 
     let mcu_w = st.max_h as usize * 8;
@@ -433,25 +436,17 @@ fn decode_baseline<R: embedded_io::Read>(
 
     if st.progressive {
         log::warn!(
-            "jpeg: progressive {}x{} -> {}x{} (scale {}, first scan Ss={} Se={} Al={})",
+            "jpeg: progressive {}x{} -> {}x{} (first scan Ss={} Se={} Al={})",
             w,
             h,
             out_w,
             out_h,
-            scale,
             st.scan_ss,
             st.scan_se,
             st.scan_al
         );
     } else {
-        log::info!(
-            "jpeg: baseline {}x{} → {}x{} (scale {})",
-            w,
-            h,
-            out_w,
-            out_h,
-            scale
-        );
+        log::info!("jpeg: baseline {}x{} -> {}x{}", w, h, out_w, out_h);
     }
 
     // allocate buffers
@@ -533,14 +528,15 @@ fn decode_baseline<R: embedded_io::Read>(
             if src_y >= h || out_y >= out_h {
                 break;
             }
-            if src_y % scale != 0 {
+            let target_src_y = ((out_y as u32 * y_step) >> 16) as usize;
+            if src_y != target_src_y {
                 continue;
             }
             let row_off = py * row_w;
             let out_row = &mut output[out_y * out_stride..(out_y + 1) * out_stride];
             dither_row_grey(
                 &y_row[row_off..],
-                scale,
+                x_step,
                 out_w,
                 &mut err_cur,
                 &mut err_nxt,
@@ -1051,14 +1047,14 @@ fn idct(block: &[i32; 64], out: &mut [u8; 64]) {
 #[inline]
 fn dither_row_grey(
     row: &[u8],
-    scale: usize,
+    x_step: u32,
     out_w: usize,
     err_cur: &mut [i16],
     err_nxt: &mut [i16],
     out_row: &mut [u8],
 ) {
     for ox in 0..out_w {
-        let sx = ox * scale;
+        let sx = ((ox as u32 * x_step) >> 16) as usize;
         let g = row[sx] as i16;
         let val = (g + err_cur[ox + 1]).clamp(0, 255);
         let black = val < 128;

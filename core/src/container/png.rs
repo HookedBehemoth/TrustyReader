@@ -159,34 +159,29 @@ pub fn decode_png_from<R: Read + Seek>(
     let palette_grey = build_palette_lut(header.color_type, &plte)?;
     drop(plte);
 
-    // output dimensions
-    let scale = {
-        let sw = header
-            .width
-            .checked_add(max_w as u32 - 1)
-            .unwrap_or(u32::MAX)
-            / max_w as u32;
-        let sh = header
-            .height
-            .checked_add(max_h as u32 - 1)
-            .unwrap_or(u32::MAX)
-            / max_h as u32;
-        sw.max(sh).max(1) as usize
+    // output dimensions (aspect-ratio-preserving, fits within max_w × max_h)
+    let src_w = header.width as usize;
+    let src_h = header.height as usize;
+    let (out_w, out_h) = if src_w <= max_w as usize && src_h <= max_h as usize {
+        (src_w, src_h)
+    } else if (src_w as u32) * (max_h as u32) > (src_h as u32) * (max_w as u32) {
+        (max_w as usize, ((src_h as u32 * max_w as u32) / src_w as u32).max(1) as usize)
+    } else {
+        (((src_w as u32 * max_h as u32) / src_h as u32).max(1) as usize, max_h as usize)
     };
-    let out_w = (header.width as usize / scale).max(1);
-    let out_h = (header.height as usize / scale).max(1);
+    // 16.16 fixed-point step: source pixels per output pixel
+    let x_step: u32 = ((src_w as u32) << 16) / out_w as u32;
+    let y_step: u32 = ((src_h as u32) << 16) / out_h as u32;
     let out_stride = (out_w + 7) / 8;
     let scanline_bytes = header.scanline_bytes();
     let bpp = header.bytes_per_pixel();
-    let src_h = header.height as usize;
 
     log::info!(
-        "png: streaming {}x{} -> {}x{} (scale {})",
+        "png: streaming {}x{} -> {}x{}",
         header.width,
         header.height,
         out_w,
-        out_h,
-        scale
+        out_h
     );
 
     // allocate working buffers
@@ -281,12 +276,13 @@ pub fn decode_png_from<R: Read + Seek>(
 
                 unfilter_row(filter, &mut curr_row, &prev_row, bpp);
 
-                if src_y % scale == 0 && out_y < out_h {
+                let target_src_y = ((out_y as u32 * y_step) >> 16) as usize;
+                if src_y == target_src_y && out_y < out_h {
                     dither_row(
                         &curr_row,
                         &header,
                         &palette_grey,
-                        scale,
+                        x_step,
                         out_w,
                         &mut err_cur,
                         &mut err_nxt,
@@ -534,14 +530,14 @@ fn dither_row(
     src_row: &[u8],
     hdr: &PngHeader,
     pal: &[u8; 256],
-    scale: usize,
+    x_step: u32,
     out_w: usize,
     err_cur: &mut [i16],
     err_nxt: &mut [i16],
     out_row: &mut [u8],
 ) {
     for ox in 0..out_w {
-        let sx = ox * scale;
+        let sx = ((ox as u32 * x_step) >> 16) as usize;
         let grey = pixel_to_grey(src_row, sx, hdr, pal) as i16;
         // add accumulated error (offset by 1 for the left sentinel)
         let val = (grey + err_cur[ox + 1]).clamp(0, 255);
