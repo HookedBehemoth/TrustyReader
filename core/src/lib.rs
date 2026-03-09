@@ -12,6 +12,7 @@ pub mod fs;
 pub mod input;
 pub mod layout;
 pub mod res;
+pub mod bench;
 
 extern crate alloc;
 extern crate embedded_zip as zip;

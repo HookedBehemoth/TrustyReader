@@ -45,6 +45,13 @@ const MAX_BUFFER_SIZE: usize = 512;
 // For more information see: <https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/system/app_image_format.html#application-description>
 esp_bootloader_esp_idf::esp_app_desc!();
 
+#[unsafe(no_mangle)]
+pub extern "Rust" fn _esp_println_timestamp() -> u64 {
+    esp_hal::time::Instant::now()
+        .duration_since_epoch()
+        .as_millis()
+}
+
 fn log_heap() {
     let stats = esp_alloc::HEAP.stats();
     info!("{stats}");

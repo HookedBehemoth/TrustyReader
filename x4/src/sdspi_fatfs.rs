@@ -3,7 +3,7 @@ use core::{
     fmt::{Error, Write},
 };
 
-use alloc::{slice, vec::Vec};
+use alloc::vec::Vec;
 use embedded_hal_bus::spi::RefCellDevice;
 use embedded_io::{ErrorType, Read, Seek, SeekFrom};
 use embedded_sdmmc::{Block, BlockDevice, BlockIdx, SdCard};

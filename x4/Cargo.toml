@@ -4,6 +4,10 @@ edition.workspace = true
 rust-version.workspace = true
 version.workspace = true
 
+[[bin]]
+name = "bench"
+path = "src/bench.rs"
+
 [dependencies]
 log.workspace = true
 trusty-core = { path = "../core" }
@@ -19,7 +23,7 @@ esp-backtrace = { git = "https://github.com/esp-rs/esp-hal", features = [
   "println",
 ] }
 esp-storage = { git = "https://github.com/esp-rs/esp-hal", features = ["esp32c3"] }
-esp-println = { git = "https://github.com/esp-rs/esp-hal", features = ["esp32c3", "log-04"] }
+esp-println = { git = "https://github.com/esp-rs/esp-hal", features = ["esp32c3", "log-04", "timestamp"] }
 embedded-graphics.workspace = true
 embedded-hal = "1.0.0"
 embedded-hal-bus = "0.3.0"
