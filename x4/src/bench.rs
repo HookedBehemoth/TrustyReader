@@ -15,8 +15,10 @@ use core::cell::RefCell;
 
 use crate::sdspi_fatfs::FatFs;
 use alloc::boxed::Box;
+use alloc::string::ToString;
 use embassy_executor::Spawner;
 use embedded_hal_bus::spi::RefCellDevice;
+use embedded_io::{Error, ErrorKind};
 use esp_backtrace as _;
 use esp_hal::clock::CpuClock;
 use esp_hal::delay::Delay;
@@ -26,7 +28,10 @@ use esp_hal::rtc_cntl::{Rtc, SocResetReason, reset_reason, wakeup_cause};
 use esp_hal::spi::Mode;
 use esp_hal::spi::master::{Config, Spi};
 use esp_hal::system::Cpu;
+use esp_hal::time::Instant;
 use log::info;
+use trusty_core::container::book::Book;
+use trusty_core::fs::{self, Directory, DirEntry, File, Filesystem};
 
 extern crate alloc;
 const MAX_BUFFER_SIZE: usize = 512;
@@ -37,7 +42,7 @@ esp_bootloader_esp_idf::esp_app_desc!();
 
 #[unsafe(no_mangle)]
 pub extern "Rust" fn _esp_println_timestamp() -> u64 {
-    esp_hal::time::Instant::now()
+    Instant::now()
         .duration_since_epoch()
         .as_millis()
 }
@@ -91,7 +96,7 @@ async fn main(_spawner: Spawner) {
 
     info!("Setup complete! Starting Benchmark...");
     
-    trusty_core::bench::parse_all_books(&mut sdcard).unwrap();
+    parse_all_books(&mut sdcard).unwrap();
 
     info!("Benchmark done, entering sleep mode.");
 
@@ -103,4 +108,41 @@ async fn main(_spawner: Spawner) {
     info!("Sleeping");
     delay.delay_millis(100);
     rtc.sleep_deep(&[&rtcio]);
+}
+
+pub fn parse_all_books<FS: fs::Filesystem>(filesystem: &mut FS) -> Result<(), ErrorKind> {
+    let root = filesystem.open_directory("/").map_err(|e| e.kind())?;
+    let entries = root.list().map_err(|e| e.kind())?;
+    
+    let mut timings = alloc::vec![];
+    for entry in entries {
+        if entry.is_directory() {
+            continue;
+        }
+        if !entry.name().ends_with(".epub") {
+            continue;
+        }
+        let start = Instant::now();
+        let mut file = filesystem.open_file_entry(&root, &entry, fs::Mode::Read).map_err(|e| e.kind())?;
+        log::info!("Parsing book from file: {}", entry.name());
+        let book = Book::from_file(entry.name(), filesystem, &mut file).unwrap();
+        log::info!("Parsed book: {}", book.title());
+        for i in 0..book.chapter_count() {
+            log::info!("Parsing chapter {} of {}", i + 1, book.chapter_count());
+            if let Some(chapter) = book.chapter(i, &mut file) {
+                log::info!("Parsed chapter: {:?}", chapter.title);
+            } else {
+                log::error!("Failed to parse chapter {}", i + 1);
+            };
+        }
+        let duration = Instant::now() - start;
+        log::info!("Finished parsing book: {} in {} ms", book.title(), duration.as_millis());
+        timings.push((entry.name().to_string(), duration));
+    }
+    timings.sort_by(|a, b| a.1.cmp(&b.1));
+    for (name, duration) in timings {
+        let millis: u64 = duration.as_millis();
+        log::info!("Book '{}' parsed in {} ms", name, millis);
+    }
+    Ok(())
 }

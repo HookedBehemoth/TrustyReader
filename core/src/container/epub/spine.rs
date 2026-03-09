@@ -37,7 +37,7 @@ impl SpineFileResolver<'_> {
             }
         }
         let full_path: heapless::String<256> = heapless::format!("{}{}", folder, path).ok()?;
-        log::info!("Resolving spine file with path '{}', folder '{}', back_count {}, full_path '{}'", path, self.folder, back_count, full_path);
+        log::trace!("Resolving spine file with path '{}', folder '{}', back_count {}, full_path '{}'", path, self.folder, back_count, full_path);
         self.file_resolver.file_idx(&full_path)
     }
 }
@@ -144,7 +144,7 @@ fn parse_body<R: embedded_io::Read>(
                 let Some(idx) = resolver.content_idx(src) else {
                     continue;
                 };
-                log::info!("Resolved image {} to content index: {}", src_attr, idx);
+                log::trace!("Resolved image {} to content index: {}", src_attr, idx);
                 parser.push_image(idx, 0, 0);
             }
             xml::Event::StartElement { name: "hr", .. } => {

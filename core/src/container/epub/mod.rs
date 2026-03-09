@@ -1,5 +1,5 @@
 use alloc::{borrow::ToOwned, boxed::Box, string::String, vec::Vec};
-use log::info;
+use log::{info, trace};
 
 use crate::{container::{css, image}, fs::File, zip::{self, ZipEntryReader}};
 use super::book;
@@ -70,7 +70,7 @@ pub fn parse(file: &mut impl File) -> Result<Epub> {
 pub fn parse_chapter(epub: &Epub, index: usize, file: &mut impl File) -> Result<super::book::Chapter> {
     info!("Loading chapter {} from EPUB", index);
     let chapter = epub.spine.get(index).ok_or(error::EpubError::InvalidData)?;
-    info!("Chapter file index: {}", chapter.file_idx);
+    trace!("Chapter file index: {}", chapter.file_idx);
     // TODO: Map Spine entries to TOC entries while parsing
     let title = if let Some(toc) = &epub.toc {
         toc.nav_map
@@ -97,6 +97,7 @@ pub fn parse_chapter(epub: &Epub, index: usize, file: &mut impl File) -> Result<
     // Resolve image sizes now that the XHTML reader has released the file
     for para in &mut chapter.paragraphs {
         if let book::Paragraph::Image { key, width, height } = para {
+            info!("Sizing image with key {} in chapter", key);
             if let Ok(size) = read_image_size(epub, *key, file) {
                 *width = size.0;
                 *height = size.1;
