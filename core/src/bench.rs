@@ -9,6 +9,9 @@ pub fn parse_all_books<FS: fs::Filesystem>(filesystem: &mut FS) -> Result<(), Er
         if entry.is_directory() {
             continue;
         }
+        if !entry.name().ends_with(".epub") {
+            continue;
+        }
         let mut file = filesystem.open_file_entry(&root, &entry, fs::Mode::Read).map_err(|e| e.kind())?;
         log::info!("Parsing book from file: {}", entry.name());
         let book = Book::from_file(entry.name(), filesystem, &mut file).unwrap();
