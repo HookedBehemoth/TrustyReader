@@ -98,16 +98,11 @@ async fn main(_spawner: Spawner) {
     
     parse_all_books(&mut sdcard).unwrap();
 
-    info!("Benchmark done, entering sleep mode.");
+    info!("Benchmark done, spinning.");
 
-    let mut power_pin = peripherals.GPIO3;
-    let wakeup_pins: &mut [(&mut dyn RtcPinWithResistors, WakeupLevel)] =
-        &mut [(&mut power_pin, WakeupLevel::Low)];
-
-    let rtcio = RtcioWakeupSource::new(wakeup_pins);
-    info!("Sleeping");
-    delay.delay_millis(100);
-    rtc.sleep_deep(&[&rtcio]);
+    loop {
+        delay.delay_millis(1000u32);
+    }
 }
 
 pub fn parse_all_books<FS: fs::Filesystem>(filesystem: &mut FS) -> Result<(), ErrorKind> {
