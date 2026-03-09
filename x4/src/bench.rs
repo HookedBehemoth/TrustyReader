@@ -30,11 +30,11 @@ use esp_hal::spi::master::{Config, Spi};
 use esp_hal::system::Cpu;
 use esp_hal::time::Instant;
 use log::info;
-use trusty_core::container::book::Book;
-use trusty_core::fs::{self, Directory, DirEntry, File, Filesystem};
+use trusty_core::container::image::Image;
+use trusty_core::container::{epub, image};
+use trusty_core::fs::{self, Directory, DirEntry};
 
 extern crate alloc;
-const MAX_BUFFER_SIZE: usize = 512;
 
 // This creates a default app-descriptor required by the esp-idf bootloader.
 // For more information see: <https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/system/app_image_format.html#application-description>
@@ -115,6 +115,7 @@ pub fn parse_all_books<FS: fs::Filesystem>(filesystem: &mut FS) -> Result<(), Er
     let entries = root.list().map_err(|e| e.kind())?;
     
     let mut timings = alloc::vec![];
+    let mut image_timings = alloc::vec![];
     for entry in entries {
         if entry.is_directory() {
             continue;
@@ -125,24 +126,53 @@ pub fn parse_all_books<FS: fs::Filesystem>(filesystem: &mut FS) -> Result<(), Er
         let start = Instant::now();
         let mut file = filesystem.open_file_entry(&root, &entry, fs::Mode::Read).map_err(|e| e.kind())?;
         log::info!("Parsing book from file: {}", entry.name());
-        let book = Book::from_file(entry.name(), filesystem, &mut file).unwrap();
-        log::info!("Parsed book: {}", book.title());
-        for i in 0..book.chapter_count() {
-            log::info!("Parsing chapter {} of {}", i + 1, book.chapter_count());
-            if let Some(chapter) = book.chapter(i, &mut file) {
+        let book = epub::parse(&mut file).unwrap();
+        log::info!("Parsed book: {}", book.metadata.title);
+        for i in 0..book.spine.len() {
+            if let Ok(chapter) = epub::parse_chapter(&book, i, &mut file) {
                 log::info!("Parsed chapter: {:?}", chapter.title);
             } else {
                 log::error!("Failed to parse chapter {}", i + 1);
             };
         }
         let duration = Instant::now() - start;
-        log::info!("Finished parsing book: {} in {} ms", book.title(), duration.as_millis());
+        log::warn!("Finished parsing book: {} in {} ms", book.metadata.title, duration.as_millis());
         timings.push((entry.name().to_string(), duration));
+
+        let entries = book.file_resolver.entries();
+        for idx in 0..entries.len() {
+            let entry = &entries[idx];
+            // log::info!("Book file entry: {}", file.name);
+            if let Some(image_format) = image::Format::guess_from_filename(&entry.name) {
+                log::trace!("Detected image format {:?} for file {}", image_format, entry.name);
+
+                let start = Instant::now();
+                let Ok(Image::OneBpp(image)) = epub::parse_image(&book, idx as _, (800, 480), &mut file) else {
+                    continue;
+                };
+                let duration = Instant::now() - start;
+                log::warn!("Parsed image '{}' with format {:?} ({}x{}) in {} ms", entry.name, image_format, image.width, image.height, duration.as_millis());
+                image_timings.push((entry.name.to_string(), image_format, (image.width, image.height), duration));
+
+                let start = Instant::now();
+                let Ok(Image::OneBpp(image)) = epub::parse_image(&book, idx as _, (480, 800), &mut file) else {
+                    continue;
+                };
+                let duration = Instant::now() - start;
+                log::warn!("Parsed image '{}' with format {:?} ({}x{}) in {} ms", entry.name, image_format, image.width, image.height, duration.as_millis());
+                image_timings.push((entry.name.to_string(), image_format, (image.width, image.height), duration));
+            }
+        }
     }
     timings.sort_by(|a, b| a.1.cmp(&b.1));
     for (name, duration) in timings {
         let millis: u64 = duration.as_millis();
-        log::info!("Book '{}' parsed in {} ms", name, millis);
+        log::warn!("Book '{}' parsed in {} ms", name, millis);
+    }
+    image_timings.sort_by(|a, b| a.3.cmp(&b.3));
+    for (name, format, size, duration) in image_timings {
+        let millis: u64 = duration.as_millis();
+        log::warn!("Image '{}' with format {:?} and size {}x{} parsed in {} ms", name, format, size.0, size.1, millis);
     }
     Ok(())
 }

@@ -36,6 +36,9 @@ impl FileResolver {
     pub fn entry(&self, idx: u16) -> Option<&zip::ZipFileEntry> {
         self.entries.get(idx as usize)
     }
+    pub fn entries(&self) -> &[zip::ZipFileEntry] {
+        &self.entries
+    }
 }
 
 pub struct Epub {

@@ -40,7 +40,7 @@ const CTRL_SYNC: BYTE = 0; /* Complete pending write process (needed at FF_FS_RE
 const GET_SECTOR_COUNT: BYTE = 1; /* Get media size (needed at FF_USE_MKFS == 1) */
 const GET_SECTOR_SIZE: BYTE = 2; /* Get sector size (needed at FF_MAX_SS != FF_MIN_SS) */
 const GET_BLOCK_SIZE: BYTE = 3; /* Get erase block size (needed at FF_USE_MKFS == 1) */
-const CTRL_TRIM: BYTE = 4; /* Inform device that the data on the block of sectors is no longer used (needed at FF_USE_TRIM == 1) */
+// const CTRL_TRIM: BYTE = 4; /* Inform device that the data on the block of sectors is no longer used (needed at FF_USE_TRIM == 1) */
 
 // FRESULT as newtype to implement traits
 #[repr(transparent)]
@@ -287,7 +287,7 @@ unsafe extern "C" {
     fn f_read(fp: *mut FIL, buff: *mut u8, btr: UINT, br: *mut UINT) -> FRESULT;
     fn f_write(fp: *mut FIL, buff: *const u8, btw: UINT, bw: *mut UINT) -> FRESULT;
     fn f_lseek(fp: *mut FIL, ofs: QWORD) -> FRESULT; // FSIZE_t = QWORD
-    fn f_truncate(fp: *mut FIL) -> FRESULT;
+    // fn f_truncate(fp: *mut FIL) -> FRESULT;
     fn f_sync(fp: *mut FIL) -> FRESULT;
 
     // Directory operations
@@ -297,8 +297,8 @@ unsafe extern "C" {
 
     // File/directory management
     fn f_mkdir(path: *const u8) -> FRESULT;
-    fn f_unlink(path: *const u8) -> FRESULT;
-    fn f_rename(path_old: *const u8, path_new: *const u8) -> FRESULT;
+    // fn f_unlink(path: *const u8) -> FRESULT;
+    // fn f_rename(path_old: *const u8, path_new: *const u8) -> FRESULT;
 
     // Custom helper functions
     fn ff_mount() -> FRESULT;
@@ -308,10 +308,10 @@ unsafe extern "C" {
 const FA_READ: BYTE = 0x01;
 const FA_WRITE: BYTE = 0x02;
 const FA_OPEN_EXISTING: BYTE = 0x00;
-const FA_CREATE_NEW: BYTE = 0x04;
+// const FA_CREATE_NEW: BYTE = 0x04;
 const FA_CREATE_ALWAYS: BYTE = 0x08;
 const FA_OPEN_ALWAYS: BYTE = 0x10;
-const FA_OPEN_APPEND: BYTE = 0x30;
+// const FA_OPEN_APPEND: BYTE = 0x30;
 
 #[derive(Clone)]
 pub struct FatFs;
