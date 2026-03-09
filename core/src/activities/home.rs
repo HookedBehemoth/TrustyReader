@@ -69,7 +69,7 @@ impl super::Activity for HomeActivity {
                     next: super::ActivityType::Settings,
                 },
             }
-        } else if state.charge != self.charge {
+        } else if state.charge.level.abs_diff(self.charge.level) >= 5 {
             self.charge = state.charge;
             super::UpdateResult::Redraw
         } else {
