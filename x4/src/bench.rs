@@ -137,12 +137,12 @@ pub fn parse_all_books<FS: fs::Filesystem>(filesystem: &mut FS) -> Result<(), Er
         let entries = book.file_resolver.entries();
         for idx in 0..entries.len() {
             let entry = &entries[idx];
-            // log::info!("Book file entry: {}", file.name);
             if let Some(image_format) = image::Format::guess_from_filename(&entry.name) {
                 log::trace!("Detected image format {:?} for file {}", image_format, entry.name);
 
                 let start = Instant::now();
                 let Ok(Image::OneBpp(image)) = epub::parse_image(&book, idx as _, (800, 480), &mut file) else {
+                    log::error!("Failed to parse image '{}' with format {:?} in book '{}'", entry.name, image_format, book.metadata.title);
                     continue;
                 };
                 let duration = Instant::now() - start;
@@ -151,6 +151,7 @@ pub fn parse_all_books<FS: fs::Filesystem>(filesystem: &mut FS) -> Result<(), Er
 
                 let start = Instant::now();
                 let Ok(Image::OneBpp(image)) = epub::parse_image(&book, idx as _, (480, 800), &mut file) else {
+                    log::error!("Failed to parse image '{}' with format {:?} in book '{}'", entry.name, image_format, book.metadata.title);
                     continue;
                 };
                 let duration = Instant::now() - start;

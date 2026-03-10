@@ -160,6 +160,9 @@ impl JpegState {
 
 struct BitReader<R> {
     source: R,
+    cache: Vec<u8>,
+    cache_pos: usize,
+    cache_len: usize,
     buf: u32,
     avail: u8,
     marker: u8, // stashed marker byte (non-zero = encountered during next_byte)
@@ -169,10 +172,27 @@ impl<R: embedded_io::Read> BitReader<R> {
     fn new(source: R) -> Self {
         Self {
             source,
+            cache: alloc::vec![0u8; 128],
+            cache_pos: 0,
+            cache_len: 0,
             buf: 0,
             avail: 0,
             marker: 0,
         }
+    }
+
+    fn next_byte_inner(&mut self) -> Result<u8, &'static str> {
+        if self.cache_pos >= self.cache_len {
+            let n = self.source.read(&mut self.cache).map_err(|_| "jpeg: read error")?;
+            if n == 0 {
+                return Err("jpeg: unexpected end of data");
+            }
+            self.cache_pos = 0;
+            self.cache_len = n;
+        }
+        let b = self.cache[self.cache_pos];
+        self.cache_pos += 1;
+        Ok(b)
     }
 
     // fetch next entropy-coded byte, handling JPEG byte stuffing
@@ -180,20 +200,12 @@ impl<R: embedded_io::Read> BitReader<R> {
         if self.marker != 0 {
             return Ok(0);
         }
-        let mut b = [0u8; 1];
-        let n = self.source.read(&mut b).map_err(|_| "jpeg: read error")?;
-        if n == 0 {
-            return Err("jpeg: unexpected end of data");
-        }
-        if b[0] != 0xFF {
-            return Ok(b[0]);
+        let b = self.next_byte_inner()?;
+        if b != 0xFF {
+            return Ok(b);
         }
         loop {
-            let n = self.source.read(&mut b).map_err(|_| "jpeg: read error")?;
-            if n == 0 {
-                return Err("jpeg: unexpected end of data");
-            }
-            let next = b[0];
+            let next = self.next_byte_inner()?;
             match next {
                 0x00 => return Ok(0xFF),
                 0xFF => continue,
@@ -256,21 +268,12 @@ impl<R: embedded_io::Read> BitReader<R> {
 
         // scan forward for the restart marker
         loop {
-            let mut b = [0u8; 1];
-            let n = self.source.read(&mut b).map_err(|_| "jpeg: read error")?;
-            if n == 0 {
-                return Ok(());
-            }
-            let next = b[0];
+            let next = self.next_byte_inner().map_err(|_| "jpeg: read error while seeking restart")?;
             if next != 0xFF {
                 continue;
             }
             loop {
-                let n = self.source.read(&mut b).map_err(|_| "jpeg: read error")?;
-                if n == 0 {
-                    return Ok(());
-                }
-                let m = b[0];
+                let m = self.next_byte_inner().map_err(|_| "jpeg: read error while seeking restart")?;
                 match m {
                     0xFF => continue,
                     0x00 => break,
