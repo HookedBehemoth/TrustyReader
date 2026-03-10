@@ -46,7 +46,7 @@ pub struct ZipEntryReader<'a, R> {
     // Inflate state for deflate decompression
     inflater: Option<Box<inflate::stream::InflateState>>,
     // Input buffer for compressed data
-    in_buf: [u8; 512],
+    in_buf: Vec<u8>,
     in_buf_start: usize,
     in_buf_end: usize,
 }
@@ -101,7 +101,7 @@ impl<'a, R: Read + Seek> ZipEntryReader<'a, R> {
             compressed_remaining: lfh.compressed_size as usize,
             uncompressed_remaining: lfh.uncompressed_size as usize,
             inflater,
-            in_buf: [0u8; 512],
+            in_buf: vec![0u8; 512],
             in_buf_start: 0,
             in_buf_end: 0,
         })

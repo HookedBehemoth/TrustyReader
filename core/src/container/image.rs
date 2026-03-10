@@ -92,12 +92,6 @@ pub fn decode<R: Read + Seek>(
     max_w: u16,
     max_h: u16,
 ) -> Result<Image, &'static str> {
-    log::info!(
-        "Decoding image with format {:?}, max dimensions {}x{}",
-        format,
-        max_w,
-        max_h
-    );
     match format {
         Format::Tbmp => {
             let header = tbmp::parse_header(file).map_err(|_| "image: failed to parse TBMP")?;
@@ -123,7 +117,6 @@ pub fn read_size<R: Read + Seek>(
 ) -> Result<(u16, u16), &'static str> {
     let mut magic = [0u8; 2];
     file.read_exact(&mut magic).map_err(|_| "image: read magic")?;
-    file.seek(SeekFrom::Start(0)).map_err(|_| "image: seek")?;
 
     if magic[0] == 0xFF && magic[1] == 0xD8 {
         jpeg::read_jpeg_size(file, size)

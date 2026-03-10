@@ -22,9 +22,8 @@ use embedded_io::{Error, ErrorKind};
 use esp_backtrace as _;
 use esp_hal::clock::CpuClock;
 use esp_hal::delay::Delay;
-use esp_hal::gpio::{Level, Output, OutputConfig, RtcPinWithResistors};
-use esp_hal::rtc_cntl::sleep::{RtcioWakeupSource, WakeupLevel};
-use esp_hal::rtc_cntl::{Rtc, SocResetReason, reset_reason, wakeup_cause};
+use esp_hal::gpio::{Level, Output, OutputConfig};
+use esp_hal::rtc_cntl::{SocResetReason, reset_reason, wakeup_cause};
 use esp_hal::spi::Mode;
 use esp_hal::spi::master::{Config, Spi};
 use esp_hal::system::Cpu;
@@ -58,8 +57,6 @@ async fn main(_spawner: Spawner) {
 
     let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
     let peripherals = esp_hal::init(config);
-
-    let mut rtc = Rtc::new(peripherals.LPWR);
 
     info!("up and runnning!");
     let reason = reset_reason(Cpu::ProCpu).unwrap_or(SocResetReason::ChipPowerOn);
@@ -98,7 +95,7 @@ async fn main(_spawner: Spawner) {
     
     parse_all_books(&mut sdcard).unwrap();
 
-    info!("Benchmark done, spinning.");
+    log::warn!("Benchmark done, spinning.");
 
     loop {
         delay.delay_millis(1000u32);
@@ -116,7 +113,7 @@ pub fn parse_all_books<FS: fs::Filesystem>(filesystem: &mut FS) -> Result<(), Er
         if entry.is_directory() {
             continue;
         }
-        if !entry.name().ends_with(".epub") {
+        if !entry.name().ends_with("ohler.epub") {
             continue;
         }
         let start = Instant::now();

@@ -58,7 +58,8 @@ pub fn read_png_size<R: Read + Seek>(
     src: &mut R,
 ) -> Result<(u16, u16), &'static str> {
     let mut sig = [0u8; 8];
-    src.read_exact(&mut sig).map_err(|_| "png: failed to read signature")?;
+    sig[..2].copy_from_slice(&[137, 80]);
+    src.read_exact(&mut sig[2..]).map_err(|_| "png: failed to read signature")?;
     if sig != PNG_SIG {
         return Err("png: invalid signature");
     }

@@ -278,9 +278,7 @@ impl<R: embedded_io::Read, Buffer: AsRef<[u8]> + AsMut<[u8]>> Reader<R, Buffer> 
         assert!(offset <= self.end);
         assert!(offset <= self.buffer.as_ref().len());
         trace!("Copying {} bytes to start of buffer", self.end - offset);
-        for i in offset..self.end {
-            self.buffer.as_mut()[i - offset] = self.buffer.as_ref()[i];
-        }
+        self.buffer.as_mut().copy_within(offset..self.end, 0);
         self.pos = 0;
         self.end -= offset;
         let data_start = self.buffer.as_ref().len() - offset;

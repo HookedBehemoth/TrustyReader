@@ -301,8 +301,9 @@ pub fn read_jpeg_size<R: embedded_io::Read>(
     hdr.try_reserve_exact(hdr_size)
         .map_err(|_| "jpeg: OOM for header")?;
     hdr.resize(hdr_size, 0);
+    hdr[0..2].copy_from_slice(&[0xFF, M_SOI]);
     reader
-        .read_exact(&mut hdr)
+        .read_exact(&mut hdr[2..])
         .map_err(|_| "jpeg: read error for header")?;
 
     if hdr.len() < 2 || hdr[0] != 0xFF || hdr[1] != M_SOI {
@@ -452,7 +453,7 @@ fn decode_baseline<R: embedded_io::Read>(
             st.scan_al
         );
     } else {
-        log::info!("jpeg: baseline {}x{} -> {}x{}", w, h, out_w, out_h);
+        log::trace!("jpeg: baseline {}x{} -> {}x{}", w, h, out_w, out_h);
     }
 
     // allocate buffers
