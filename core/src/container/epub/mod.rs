@@ -71,7 +71,7 @@ pub fn parse(file: &mut impl File) -> Result<Epub> {
 }
 
 pub fn parse_chapter(epub: &Epub, index: usize, file: &mut impl File) -> Result<super::book::Chapter> {
-    info!("Loading chapter {} from EPUB", index);
+    trace!("Loading chapter {} from EPUB", index);
     let chapter = epub.spine.get(index).ok_or(error::EpubError::InvalidData)?;
     trace!("Chapter file index: {}", chapter.file_idx);
     // TODO: Map Spine entries to TOC entries while parsing
@@ -84,7 +84,7 @@ pub fn parse_chapter(epub: &Epub, index: usize, file: &mut impl File) -> Result<
     } else {
         None
     };
-    info!("Chapter title: {:?}", title);
+    trace!("Chapter title: {:?}", title);
     let entry = epub.file_resolver.entry(chapter.file_idx).unwrap();
     info!("Chapter file entry: {}", entry.name);
     let reader = ZipEntryReader::new(file, entry)?;

@@ -16,6 +16,14 @@ path = "src/fontgen.rs"
 name = "xmltest"
 path = "src/xmltest.rs"
 
+[[bin]]
+name = "parse"
+path = "src/parse.rs"
+
+[[bench]]
+name = "epub_bench"
+harness = false
+
 [dependencies]
 embedded-xml.workspace = true
 embedded-zip.workspace = true
@@ -28,3 +36,6 @@ embedded-io = { workspace = true, features = ["std"] }
 argh = "0.1.13"
 image = { version = "0.25.9", features = ["png", "jpeg", "bmp", "webp"], default-features = false }
 fontdue = "0.9.3"
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }

@@ -111,6 +111,7 @@ pub fn parse_all_books<FS: fs::Filesystem>(filesystem: &mut FS) -> Result<(), Er
     
     let mut timings = alloc::vec![];
     let mut image_timings = alloc::vec![];
+    let mut highest = 0;
     for entry in entries {
         if entry.is_directory() {
             continue;
@@ -125,14 +126,21 @@ pub fn parse_all_books<FS: fs::Filesystem>(filesystem: &mut FS) -> Result<(), Er
         log::info!("Parsed book: {}", book.metadata.title);
         for i in 0..book.spine.len() {
             if let Ok(chapter) = epub::parse_chapter(&book, i, &mut file) {
-                log::info!("Parsed chapter: {:?}", chapter.title);
+                log::debug!("Parsed chapter: {:?}", chapter.title);
             } else {
                 log::error!("Failed to parse chapter {}", i + 1);
             };
+            let max_usage = esp_alloc::HEAP.stats().max_usage;
+            if max_usage > highest {
+                highest = max_usage;
+                log::warn!("New peak heap usage: {} bytes", max_usage);
+            }
         }
         let duration = Instant::now() - start;
         log::warn!("Finished parsing book: {} in {} ms", book.metadata.title, duration.as_millis());
         timings.push((entry.name().to_string(), duration));
+
+        log_heap();
 
         let entries = book.file_resolver.entries();
         for idx in 0..entries.len() {
@@ -148,6 +156,7 @@ pub fn parse_all_books<FS: fs::Filesystem>(filesystem: &mut FS) -> Result<(), Er
                 let duration = Instant::now() - start;
                 log::warn!("Parsed image '{}' with format {:?} ({}x{}) in {} ms", entry.name, image_format, image.width, image.height, duration.as_millis());
                 image_timings.push((entry.name.to_string(), image_format, (image.width, image.height), duration));
+                drop(image);
 
                 let start = Instant::now();
                 let Ok(Image::OneBpp(image)) = epub::parse_image(&book, idx as _, (480, 800), &mut file) else {

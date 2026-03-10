@@ -172,7 +172,7 @@ impl<R: embedded_io::Read> BitReader<R> {
     fn new(source: R) -> Self {
         Self {
             source,
-            cache: alloc::vec![0u8; 128],
+            cache: alloc::vec![0u8; 512],
             cache_pos: 0,
             cache_len: 0,
             buf: 0,
@@ -181,6 +181,7 @@ impl<R: embedded_io::Read> BitReader<R> {
         }
     }
 
+    #[inline(always)]
     fn next_byte_inner(&mut self) -> Result<u8, &'static str> {
         if self.cache_pos >= self.cache_len {
             let n = self.source.read(&mut self.cache).map_err(|_| "jpeg: read error")?;
@@ -190,12 +191,13 @@ impl<R: embedded_io::Read> BitReader<R> {
             self.cache_pos = 0;
             self.cache_len = n;
         }
-        let b = self.cache[self.cache_pos];
+        let b = unsafe { *self.cache.get_unchecked(self.cache_pos) };
         self.cache_pos += 1;
         Ok(b)
     }
 
     // fetch next entropy-coded byte, handling JPEG byte stuffing
+    #[inline(always)]
     fn next_byte(&mut self) -> Result<u8, &'static str> {
         if self.marker != 0 {
             return Ok(0);
@@ -217,6 +219,7 @@ impl<R: embedded_io::Read> BitReader<R> {
         }
     }
 
+    #[inline(always)]
     fn ensure(&mut self, n: u8) -> Result<(), &'static str> {
         while self.avail < n {
             let b = self.next_byte()?;
@@ -828,12 +831,13 @@ fn build_huff_table(table: &mut HuffTable, bits: &[u8; 16], vals: &[u8]) {
 
 // Huffman decode
 
+#[inline(always)]
 fn huff_decode<R: embedded_io::Read>(
     r: &mut BitReader<R>,
     t: &HuffTable,
 ) -> Result<u8, &'static str> {
     let peek8 = r.peek(8)? as usize;
-    let (sym, nb) = t.lut[peek8];
+    let (sym, nb) = unsafe { *t.lut.get_unchecked(peek8) };
     if nb > 0 {
         r.drop_bits(nb);
         return Ok(sym);
@@ -841,10 +845,14 @@ fn huff_decode<R: embedded_io::Read>(
     let peek16 = r.peek(16)? as i32;
     for bl in 9..=16u8 {
         let code = peek16 >> (16 - bl);
-        if t.maxcode[bl as usize] >= 0 && code <= t.maxcode[bl as usize] {
+        let bli = bl as usize;
+        let max = unsafe { *t.maxcode.get_unchecked(bli) };
+        if max >= 0 && code <= max {
             r.drop_bits(bl);
-            let idx = t.valptr[bl as usize] as i32 + code - t.mincode[bl as usize];
-            return Ok(t.values[idx as usize]);
+            let idx = unsafe { *t.valptr.get_unchecked(bli) } as i32
+                + code
+                - unsafe { *t.mincode.get_unchecked(bli) };
+            return Ok(unsafe { *t.values.get_unchecked(idx as usize) });
         }
     }
     Err("jpeg: invalid Huffman code")
@@ -982,15 +990,14 @@ fn idct(block: &[i32; 64], out: &mut [u8; 64]) {
         o2 += s2 + s3;
         o3 += s1 + s4;
 
-        let sh = CB - P1;
-        ws[b] = descale(t10 + o3, sh);
-        ws[b + 7] = descale(t10 - o3, sh);
-        ws[b + 1] = descale(t11 + o2, sh);
-        ws[b + 6] = descale(t11 - o2, sh);
-        ws[b + 2] = descale(t12 + o1, sh);
-        ws[b + 5] = descale(t12 - o1, sh);
-        ws[b + 3] = descale(t13 + o0, sh);
-        ws[b + 4] = descale(t13 - o0, sh);
+        ws[b] = descale::<{ CB - P1 }>(t10 + o3);
+        ws[b + 7] = descale::<{ CB - P1 }>(t10 - o3);
+        ws[b + 1] = descale::<{ CB - P1 }>(t11 + o2);
+        ws[b + 6] = descale::<{ CB - P1 }>(t11 - o2);
+        ws[b + 2] = descale::<{ CB - P1 }>(t12 + o1);
+        ws[b + 5] = descale::<{ CB - P1 }>(t12 - o1);
+        ws[b + 3] = descale::<{ CB - P1 }>(t13 + o0);
+        ws[b + 4] = descale::<{ CB - P1 }>(t13 - o0);
     }
 
     for col in 0..8 {
@@ -998,7 +1005,7 @@ fn idct(block: &[i32; 64], out: &mut [u8; 64]) {
         let (d4, d5, d6, d7) = (ws[col + 32], ws[col + 40], ws[col + 48], ws[col + 56]);
 
         if d1 == 0 && d2 == 0 && d3 == 0 && d4 == 0 && d5 == 0 && d6 == 0 && d7 == 0 {
-            let v = clamp(descale(d0, P1 + 3) + 128);
+            let v = clamp(descale::<{ P1 + 3 }>(d0) + 128);
             out[col] = v;
             out[col + 8] = v;
             out[col + 16] = v;
@@ -1032,21 +1039,23 @@ fn idct(block: &[i32; 64], out: &mut [u8; 64]) {
         o2 += s2 + s3;
         o3 += s1 + s4;
 
-        let sh = CB + P1 + 3;
-        out[col] = clamp(descale(t10 + o3, sh) + 128);
-        out[col + 56] = clamp(descale(t10 - o3, sh) + 128);
-        out[col + 8] = clamp(descale(t11 + o2, sh) + 128);
-        out[col + 48] = clamp(descale(t11 - o2, sh) + 128);
-        out[col + 16] = clamp(descale(t12 + o1, sh) + 128);
-        out[col + 40] = clamp(descale(t12 - o1, sh) + 128);
-        out[col + 24] = clamp(descale(t13 + o0, sh) + 128);
-        out[col + 32] = clamp(descale(t13 - o0, sh) + 128);
+        out[col] = clamp(descale::<{ CB + P1 + 3 }>(t10 + o3) + 128);
+        out[col + 56] = clamp(descale::<{ CB + P1 + 3 }>(t10 - o3) + 128);
+        out[col + 8] = clamp(descale::<{ CB + P1 + 3 }>(t11 + o2) + 128);
+        out[col + 48] = clamp(descale::<{ CB + P1 + 3 }>(t11 - o2) + 128);
+        out[col + 16] = clamp(descale::<{ CB + P1 + 3 }>(t12 + o1) + 128);
+        out[col + 40] = clamp(descale::<{ CB + P1 + 3 }>(t12 - o1) + 128);
+        out[col + 24] = clamp(descale::<{ CB + P1 + 3 }>(t13 + o0) + 128);
+        out[col + 32] = clamp(descale::<{ CB + P1 + 3 }>(t13 - o0) + 128);
     }
 }
 
 // Floyd-Steinberg dithering
 
-// dither one row of Y pixels from the MCU row buffer inline
+/// Dither one row of Y pixels from the MCU row buffer to 1-bit output.
+///
+/// All inner-loop indexing uses unchecked access — safety is guaranteed
+/// by the allocation sizes and loop bounds established in `decode_baseline`.
 #[inline]
 fn dither_row_grey(
     row: &[u8],
@@ -1056,33 +1065,64 @@ fn dither_row_grey(
     err_nxt: &mut [i16],
     out_row: &mut [u8],
 ) {
-    for ox in 0..out_w {
-        let sx = ((ox as u32 * x_step) >> 16) as usize;
-        let g = row[sx] as i16;
-        let val = (g + err_cur[ox + 1]).clamp(0, 255);
-        let black = val < 128;
-        let q = if black { 0i16 } else { 255 };
-        let e = val - q;
-        if !black {
-            out_row[ox / 8] |= 1 << (7 - (ox & 7));
+    debug_assert!(err_cur.len() >= out_w + 2);
+    debug_assert!(err_nxt.len() >= out_w + 2);
+    debug_assert!(out_row.len() >= out_w.div_ceil(8));
+
+    let mut sx_acc: u32 = 0;
+    let mut byte: u8 = 0;
+    let mut bidx: usize = 0;
+
+    // SAFETY: err_cur[ox+1] .. err_cur[ox+2] and err_nxt[ox] .. err_nxt[ox+2]
+    // are in-bounds because both slices have length >= out_w + 2 and ox < out_w.
+    // row[sx] is in-bounds because sx < source_width <= row.len() (row is the
+    // full MCU-row buffer). out_row[bidx] is in-bounds because bidx < ceil(out_w/8).
+    unsafe {
+        for ox in 0..out_w {
+            let sx = (sx_acc >> 16) as usize;
+            sx_acc = sx_acc.wrapping_add(x_step);
+
+            let g = *row.get_unchecked(sx) as i16;
+            let raw = g + *err_cur.get_unchecked(ox + 1);
+            // Branchless clamp: two comparisons, no call overhead.
+            let val = if raw < 0 { 0i16 } else if raw > 255 { 255 } else { raw };
+            // Quantise to 0 or 255. Error is always in -255..255 so fits i16.
+            let white = val >= 128;
+            let e = val - if white { 255 } else { 0 };
+
+            if white {
+                byte |= 0x80u8 >> (ox & 7);
+            }
+
+            // Distribute error with arithmetic right-shift.
+            *err_cur.get_unchecked_mut(ox + 2) += (e * 7) >> 4;
+            *err_nxt.get_unchecked_mut(ox)     += (e * 3) >> 4;
+            *err_nxt.get_unchecked_mut(ox + 1) += (e * 5) >> 4;
+            *err_nxt.get_unchecked_mut(ox + 2) += e >> 4;
+
+            if ox & 7 == 7 {
+                *out_row.get_unchecked_mut(bidx) = byte;
+                bidx += 1;
+                byte = 0;
+            }
         }
-        err_cur[ox + 2] += e * 7 / 16;
-        err_nxt[ox] += e * 3 / 16;
-        err_nxt[ox + 1] += e * 5 / 16;
-        err_nxt[ox + 2] += e / 16;
+        // Flush partial last byte.
+        if out_w & 7 != 0 {
+            *out_row.get_unchecked_mut(bidx) = byte;
+        }
     }
 }
 
 // helpers
 
-#[inline]
-fn descale(x: i32, n: i32) -> i32 {
-    (x + (1 << (n - 1))) >> n
+#[inline(always)]
+fn descale<const N: i32>(x: i32) -> i32 {
+    (x + (1 << (N - 1))) >> N
 }
 
-#[inline]
+#[inline(always)]
 fn clamp(x: i32) -> u8 {
-    x.clamp(0, 255) as u8
+    if x < 0 { 0 } else if x > 255 { 255 } else { x as u8 }
 }
 
 #[inline]
