@@ -6,6 +6,5 @@ pub mod jpeg;
 pub mod markdown;
 pub mod plaintext;
 pub mod png;
-pub mod tbmp;
 pub mod xml;
 pub mod xt;

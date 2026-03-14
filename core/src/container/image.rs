@@ -1,74 +1,8 @@
 use embedded_io::{Read, Seek};
 
 use crate::{
-    container::{jpeg, png, tbmp},
-    fs::File,
-    res::font::Mode,
+    container::{jpeg, png},
 };
-
-pub enum Image {
-    Tbmp(tbmp::Header),
-    OneBpp(DecodedImage),
-}
-
-impl Image {
-    pub fn buffer_size(&self) -> usize {
-        match self {
-            Image::Tbmp(header) => header.buffer_size(),
-            Image::OneBpp(decoded) => decoded.buffer_size(),
-        }
-    }
-
-    /// TODO: move out of format
-    pub fn height(&self) -> u16 {
-        match self {
-            Image::Tbmp(header) => header.height,
-            Image::OneBpp(decoded) => decoded.height,
-        }
-    }
-
-    pub fn has_grayscale(&self) -> bool {
-        match self {
-            Image::Tbmp(_) => true,
-            _ => false,
-        }
-    }
-
-    pub fn blit_bw(
-        &self,
-        file: &mut impl File,
-        offset: u16,
-        buffers: &mut crate::framebuffer::DisplayBuffers,
-    ) {
-        match self {
-            Image::Tbmp(tbmp) => {
-                let mut buffer = alloc::vec![0u8; tbmp.buffer_size()];
-                tbmp::load_buffer(file, &tbmp, Mode::Bw, &mut buffer).ok();
-                buffers.blit(&buffer, tbmp.width, tbmp.height, offset);
-            }
-            Image::OneBpp(decoded) => {
-                buffers.blit(&decoded.data, decoded.width, decoded.height, offset);
-            }
-        }
-    }
-
-    pub fn blit_gray(
-        &self,
-        file: &mut impl File,
-        offset: u16,
-        mode: Mode,
-        buffers: &mut crate::framebuffer::DisplayBuffers,
-    ) {
-        match self {
-            Image::Tbmp(tbmp) => {
-                let mut buffer = alloc::vec![0u8; tbmp.buffer_size()];
-                tbmp::load_buffer(file, &tbmp, mode, &mut buffer).ok();
-                buffers.blit(&buffer, tbmp.width, tbmp.height, offset);
-            }
-            _ => {}
-        }
-    }
-}
 
 pub struct DecodedImage {
     /// Image width in pixels.
@@ -83,6 +17,13 @@ impl DecodedImage {
     fn buffer_size(&self) -> usize {
         (self.width.div_ceil(8) * self.height) as usize
     }
+    pub fn blit(
+        &self,
+        offset: u16,
+        buffers: &mut crate::framebuffer::DisplayBuffers,
+    ) {
+        buffers.blit(&self.data, self.width, self.height, offset);
+    }
 }
 
 pub fn decode<R: Read + Seek>(
@@ -91,19 +32,15 @@ pub fn decode<R: Read + Seek>(
     size: u32,
     max_w: u16,
     max_h: u16,
-) -> Result<Image, &'static str> {
+) -> Result<DecodedImage, &'static str> {
     match format {
-        Format::Tbmp => {
-            let header = tbmp::parse_header(file).map_err(|_| "image: failed to parse TBMP")?;
-            Ok(Image::Tbmp(header))
-        }
         Format::Jpeg => {
             let image = jpeg::decode_jpeg_streaming(file, size, max_w, max_h)?;
-            Ok(Image::OneBpp(image))
+            Ok(image)
         }
         Format::Png => {
             let image = png::decode_png_from(file, max_w, max_h)?;
-            Ok(Image::OneBpp(image))
+            Ok(image)
         }
     }
 }
@@ -148,8 +85,6 @@ pub fn scaled_size(raw_w: u16, raw_h: u16, max_w: u16, max_h: u16) -> (u16, u16)
 pub fn get_format(ext: &str) -> Option<Format> {
     if ext.eq_ignore_ascii_case("png") {
         Some(Format::Png)
-    } else if ext.eq_ignore_ascii_case("tbmp") {
-        Some(Format::Tbmp)
     } else if ext.eq_ignore_ascii_case("jpg") || ext.eq_ignore_ascii_case("jpeg") {
         Some(Format::Jpeg)
     } else {
@@ -159,7 +94,6 @@ pub fn get_format(ext: &str) -> Option<Format> {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Format {
-    Tbmp,
     Jpeg,
     Png,
 }

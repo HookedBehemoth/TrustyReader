@@ -7,12 +7,11 @@ use crate::{
     framebuffer::{DisplayBuffers, Rotation},
     fs::{self, File},
     input::Buttons,
-    res::font::Mode,
 };
 
 pub struct ImageViewerActivity<Filesystem: fs::Filesystem> {
     format: Format,
-    image: Option<Result<image::Image, &'static str>>,
+    image: Option<Result<image::DecodedImage, &'static str>>,
     file: Option<Filesystem::File>,
 }
 
@@ -43,28 +42,14 @@ impl<Filesystem: fs::Filesystem> ImageViewerActivity<Filesystem> {
 impl<Filesystem: fs::Filesystem> super::Activity for ImageViewerActivity<Filesystem> {
     fn draw(&mut self, display: &mut dyn Display, buffers: &mut DisplayBuffers) {
         log::info!("Drawing ImageViewerActivity");
-        let Some(file) = &mut self.file else {
-            return;
-        };
         let Some(Ok(image)) = &self.image else {
             return;
         };
         log::info!("Blitting image to display");
 
         buffers.clear_screen(0xFF);
-        image.blit_bw(file, 0, buffers);
+        image.blit(0, buffers);
         display.display(buffers, RefreshMode::Fast);
-
-        if image.has_grayscale() {
-            buffers.clear_screen(0x00);
-            image.blit_gray(file, 0, Mode::Msb, buffers);
-            display.copy_to_msb(buffers.get_active_buffer());
-
-            buffers.clear_screen(0x00);
-            image.blit_gray(file, 0, Mode::Lsb, buffers);
-            display.copy_to_lsb(buffers.get_active_buffer());
-            display.display_differential_grayscale(false);
-        }
     }
 
     fn update(&mut self, state: &ApplicationState) -> super::UpdateResult {

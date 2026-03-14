@@ -2,10 +2,16 @@ use alloc::{
     string::{String, ToString},
     vec::Vec,
 };
+use embedded_io::Write;
 use log::info;
+use zerocopy::{FromBytes, IntoBytes};
 
-use super::{epub, markdown, plaintext, xml, css};
-use crate::{container::image, fs::{self, File, Filesystem}, layout};
+use super::{css, epub, markdown, plaintext, xml};
+use crate::{
+    container::image,
+    fs::{self, File},
+    layout,
+};
 
 enum BookFormat {
     PlainText(String, String),
@@ -16,8 +22,17 @@ enum BookFormat {
     Epub(epub::Epub),
 }
 
-pub struct Book {
+pub struct Book<Filesystem: fs::Filesystem> {
+    filesystem: Filesystem,
+    cache_directory: String,
     format: BookFormat,
+}
+
+#[derive(zerocopy::Immutable, zerocopy::FromBytes, zerocopy::IntoBytes)]
+pub struct Progress {
+    pub chapter: u16,
+    pub paragraph: u16,
+    pub line: u16,
 }
 
 pub struct Chapter {
@@ -40,8 +55,14 @@ pub enum Paragraph {
     Hr,
 }
 
-impl Book {
-    pub fn from_file(file_path: &str, filesystem: &impl Filesystem, file: &mut impl File) -> Option<Self> {
+const BASE_PATH: &str = ".trusty";
+
+impl<Filesystem: fs::Filesystem> Book<Filesystem> {
+    pub fn from_file(
+        file_path: &str,
+        filesystem: Filesystem,
+        file: &mut impl File,
+    ) -> Option<Self> {
         info!("Loading book from file: {}", file_path);
         let (name, ext) = file_path.rsplit_once('.').unwrap_or((file_path, ""));
         let format = match ext.to_ascii_lowercase().as_str() {
@@ -63,13 +84,16 @@ impl Book {
                 let contents = file.read_to_end().ok()?;
                 let text = String::from_utf8(contents).ok()?;
                 let css_path = alloc::format!("{}.css", name);
-                let stylesheet = filesystem.open_file(&css_path, fs::Mode::Read).ok().and_then(|mut css_file| {
-                    let css_contents = css_file.read_to_end().ok()?;
-                    let css_text = String::from_utf8(css_contents).ok()?;
-                    let mut stylesheet = css::Stylesheet::default();
-                    stylesheet.extend_from_sheet(&css_text);
-                    Some(stylesheet)
-                });
+                let stylesheet = filesystem
+                    .open_file(&css_path, fs::Mode::Read)
+                    .ok()
+                    .and_then(|mut css_file| {
+                        let css_contents = css_file.read_to_end().ok()?;
+                        let css_text = String::from_utf8(css_contents).ok()?;
+                        let mut stylesheet = css::Stylesheet::default();
+                        stylesheet.extend_from_sheet(&css_text);
+                        Some(stylesheet)
+                    });
                 BookFormat::Html(name.to_string(), text, stylesheet)
             }
             "xhtml" => {
@@ -77,13 +101,16 @@ impl Book {
                 let text = String::from_utf8(contents).ok()?;
 
                 let css_path = alloc::format!("{}.css", name);
-                let stylesheet = filesystem.open_file(&css_path, fs::Mode::Read).ok().and_then(|mut css_file| {
-                    let css_contents = css_file.read_to_end().ok()?;
-                    let css_text = String::from_utf8(css_contents).ok()?;
-                    let mut stylesheet = css::Stylesheet::default();
-                    stylesheet.extend_from_sheet(&css_text);
-                    Some(stylesheet)
-                });
+                let stylesheet = filesystem
+                    .open_file(&css_path, fs::Mode::Read)
+                    .ok()
+                    .and_then(|mut css_file| {
+                        let css_contents = css_file.read_to_end().ok()?;
+                        let css_text = String::from_utf8(css_contents).ok()?;
+                        let mut stylesheet = css::Stylesheet::default();
+                        stylesheet.extend_from_sheet(&css_text);
+                        Some(stylesheet)
+                    });
                 BookFormat::Xhtml(name.to_string(), text, stylesheet)
             }
             _ => {
@@ -93,7 +120,14 @@ impl Book {
             }
         };
 
-        Some(Book { format })
+        let cache_directory = format.cache_path();
+        filesystem.create_dir_all(&cache_directory).ok();
+
+        Some(Book {
+            filesystem,
+            cache_directory,
+            format,
+        })
     }
 
     pub fn title(&self) -> &str {
@@ -128,11 +162,13 @@ impl Book {
         }
     }
 
-    pub fn image(&self, key: u16, max: (u16, u16), file: &mut impl File) -> Option<image::Image> {
-        match &self.format {
+    pub fn image(&self, key: u16, max: (u16, u16), file: &mut impl File) -> Option<image::DecodedImage> {
+        let image = match &self.format {
             BookFormat::Epub(epub) => epub::parse_image(epub, key, max, file).ok(),
             _ => None,
-        }
+        };
+        
+        image
     }
 
     pub fn language(&self) -> Option<hypher::Lang> {
@@ -142,17 +178,45 @@ impl Book {
         }
     }
 
-    pub fn directory_name(&self) -> String {
-        let title = match &self.format {
+    fn open_cache_file(&self, name: &str, mode: crate::fs::Mode) -> Option<Filesystem::File> {
+        let path = alloc::format!("{}/{}", self.cache_directory, name);
+        self.filesystem.open_file(&path, mode).ok()
+    }
+
+    pub fn store_progress(&self, progress: Progress) -> Option<()> {
+        let mut file = self.open_cache_file("progress.pod", crate::fs::Mode::Write)?;
+        let bytes = progress.as_bytes();
+        file.write(bytes).ok()?;
+        Some(())
+    }
+
+    pub fn load_progress(&self) -> Progress {
+        self.open_cache_file("progress.pod", crate::fs::Mode::Read)
+            .and_then(|mut file| file.read_to_end().ok())
+            .and_then(|contents| Progress::read_from_bytes(&contents).ok())
+            .unwrap_or(Progress {
+                chapter: 0,
+                paragraph: 0,
+                line: 0,
+            })
+    }
+}
+
+impl BookFormat {
+    fn cache_path(&self) -> String {
+        let title = match self {
             BookFormat::Epub(epub) => {
                 if let Some(author) = &epub.metadata.author {
                     return alloc::format!(
-                        "{} - {}",
+                        "{BASE_PATH}/cache/{} - {}",
                         author.replace(|c: char| UNSAFE_CHARS.contains(&c), "_"),
-                        epub.metadata.title.replace(|c: char| UNSAFE_CHARS.contains(&c), "_"))
+                        epub.metadata
+                            .title
+                            .replace(|c: char| UNSAFE_CHARS.contains(&c), "_")
+                    );
                 }
                 epub.metadata.title.as_str()
-            },
+            }
             BookFormat::PlainText(title, _) => title,
             BookFormat::Markdown(title, _) => title,
             BookFormat::Xhtml(title, _, _) => title,
@@ -160,7 +224,10 @@ impl Book {
             BookFormat::Xml(title, _) => title,
         };
 
-        title.replace(|c: char| UNSAFE_CHARS.contains(&c), "_")
+        alloc::format!(
+            "{BASE_PATH}/cache/{}",
+            title.replace(|c: char| UNSAFE_CHARS.contains(&c), "_")
+        )
     }
 }
 
