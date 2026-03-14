@@ -29,7 +29,6 @@ use esp_hal::spi::master::{Config, Spi};
 use esp_hal::system::Cpu;
 use esp_hal::time::Instant;
 use log::info;
-use trusty_core::container::image::Image;
 use trusty_core::container::{epub, image};
 use trusty_core::fs::{self, Directory, DirEntry};
 
@@ -146,7 +145,7 @@ pub fn parse_all_books<FS: fs::Filesystem>(filesystem: &mut FS) -> Result<(), Er
                 log::trace!("Detected image format {:?} for file {}", image_format, entry.name);
 
                 let start = Instant::now();
-                let Ok(Image::OneBpp(image)) = epub::parse_image(&book, idx as _, (800, 480), &mut file) else {
+                let Ok(image) = epub::parse_image(&book, idx as _, (800, 480), &mut file) else {
                     log::error!("Failed to parse image '{}' with format {:?} in book '{}'", entry.name, image_format, book.metadata.title);
                     continue;
                 };
@@ -156,7 +155,7 @@ pub fn parse_all_books<FS: fs::Filesystem>(filesystem: &mut FS) -> Result<(), Er
                 drop(image);
 
                 let start = Instant::now();
-                let Ok(Image::OneBpp(image)) = epub::parse_image(&book, idx as _, (480, 800), &mut file) else {
+                let Ok(image) = epub::parse_image(&book, idx as _, (480, 800), &mut file) else {
                     log::error!("Failed to parse image '{}' with format {:?} in book '{}'", entry.name, image_format, book.metadata.title);
                     continue;
                 };

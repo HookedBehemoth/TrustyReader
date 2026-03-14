@@ -14,9 +14,6 @@ pub struct DecodedImage {
 }
 
 impl DecodedImage {
-    fn buffer_size(&self) -> usize {
-        (self.width.div_ceil(8) * self.height) as usize
-    }
     pub fn blit(
         &self,
         offset: u16,

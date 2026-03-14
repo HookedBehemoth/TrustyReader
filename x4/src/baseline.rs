@@ -193,7 +193,7 @@ pub fn parse_all_books<FS: fs::Filesystem>(filesystem: &mut FS) -> Result<(), Er
         }
 
         // --- 4. Image parsing overhead ---
-        for (idx, entry) in entries.iter().enumerate() {
+        for entry in &entries {
             let Some(format) = image::Format::guess_from_filename(&entry.name) else {
                 continue;
             };
@@ -202,7 +202,7 @@ pub fn parse_all_books<FS: fs::Filesystem>(filesystem: &mut FS) -> Result<(), Er
             let start = Instant::now();
             let mut reader = zip::ZipEntryReader::new(&mut file, entry).map_err(|_| ErrorKind::Other)?;
             match image::decode(format, &mut reader, entry.size, 800, 480) {
-                Ok(image::Image::OneBpp(img)) => {
+                Ok(img) => {
                     let duration = Instant::now() - start;
                     log::warn!(
                         "[img] {} {:?} {}x{} (landscape) in {} ms",
@@ -214,7 +214,6 @@ pub fn parse_all_books<FS: fs::Filesystem>(filesystem: &mut FS) -> Result<(), Er
                     );
                     image_timings.push((entry.name.clone(), format, (img.width, img.height), duration));
                 }
-                Ok(_) => {}
                 Err(e) => {
                     log::error!("Failed to decode image '{}': {}", entry.name, e);
                 }
@@ -224,7 +223,7 @@ pub fn parse_all_books<FS: fs::Filesystem>(filesystem: &mut FS) -> Result<(), Er
             let start = Instant::now();
             let mut reader = zip::ZipEntryReader::new(&mut file, entry).map_err(|_| ErrorKind::Other)?;
             match image::decode(format, &mut reader, entry.size, 480, 800) {
-                Ok(image::Image::OneBpp(img)) => {
+                Ok(img) => {
                     let duration = Instant::now() - start;
                     log::warn!(
                         "[img] {} {:?} {}x{} (portrait) in {} ms",
@@ -236,7 +235,6 @@ pub fn parse_all_books<FS: fs::Filesystem>(filesystem: &mut FS) -> Result<(), Er
                     );
                     image_timings.push((entry.name.clone(), format, (img.width, img.height), duration));
                 }
-                Ok(_) => {}
                 Err(e) => {
                     log::error!("Failed to decode image '{}' (portrait): {}", entry.name, e);
                 }
