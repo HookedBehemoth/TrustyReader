@@ -1,4 +1,4 @@
-use embedded_io::{Read, Seek, SeekFrom};
+use embedded_io::{Read, Seek};
 
 use crate::{
     container::{jpeg, png, tbmp},
