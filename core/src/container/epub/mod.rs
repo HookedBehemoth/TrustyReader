@@ -129,3 +129,8 @@ pub fn parse_image(epub: &Epub, key: u16, max: (u16, u16), file: &mut impl File)
         .map_err(|_| error::EpubError::InvalidData)?;
     Ok(img)
 }
+
+#[inline(never)]
+pub(super) fn decode_html_entities(text: &str) -> alloc::borrow::Cow<'_, str> {
+    html_escape::decode_html_entities(text)
+}

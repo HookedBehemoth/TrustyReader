@@ -1,8 +1,7 @@
 use super::error::EpubError;
 use embedded_xml as xml;
 
-use alloc::{borrow::ToOwned, string::String, vec::Vec};
-use embedded_io::Read;
+use alloc::{borrow::ToOwned, string::{String, ToString}, vec::Vec};
 use log::{info, trace};
 
 pub struct TableOfContents {
@@ -10,12 +9,12 @@ pub struct TableOfContents {
 }
 
 pub fn parse(
-    reader: impl Read,
+    mut reader: impl embedded_io::Read,
     size: usize,
     file_resolver: &super::FileResolver,
 ) -> super::Result<TableOfContents> {
     info!("Parsing NCX file");
-    let mut parser = xml::Reader::new(reader, size, 1024)?;
+    let mut parser = xml::Reader::new(&mut reader, size, 1024)?;
 
     loop {
         let event = parser.next_event()?;
@@ -45,8 +44,8 @@ pub struct NavMap {
     pub nav_points: Vec<NavPoint>,
 }
 
-fn parse_nav_map<R: Read>(
-    parser: &mut xml::OwnedReader<R>,
+fn parse_nav_map(
+    parser: &mut xml::OwnedReader,
     file_resolver: &super::FileResolver,
 ) -> super::Result<NavMap> {
     let mut nav_points = Vec::new();
@@ -101,7 +100,8 @@ fn parse_nav_map<R: Read>(
                 let xml::Event::Text { content } = parser.next_event()? else {
                     return Err(EpubError::InvalidData);
                 };
-                label = Some(content.to_owned());
+                let content = super::decode_html_entities(&content);
+                label = Some(content.to_string());
                 let xml::Event::EndElement { name: "text" } = parser.next_event()? else {
                     return Err(EpubError::InvalidData);
                 };

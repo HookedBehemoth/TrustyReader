@@ -44,13 +44,13 @@ impl SpineFileResolver<'_> {
 
 pub fn parse<R: embedded_io::Read>(
     title: Option<String>,
-    reader: R,
+    mut reader: R,
     size: usize,
     extern_stylesheet: Option<&css::Stylesheet>,
     file_resolver: Option<SpineFileResolver>,
 ) -> super::Result<Chapter> {
     // TODO: Ensure this is XHTML here or while parsing?
-    let mut parser = xml::Reader::new(reader, size as _, 8096)?;
+    let mut parser = xml::Reader::new(&mut reader, size as _, 8096)?;
 
     let mut paragraphs = alloc::vec![];
     let mut inline_stylesheet = css::Stylesheet::default();
@@ -79,8 +79,8 @@ pub fn parse<R: embedded_io::Read>(
     Ok(Chapter { title, paragraphs })
 }
 
-fn parse_head<R: embedded_io::Read>(
-    reader: &mut xml::OwnedReader<R>,
+fn parse_head(
+    reader: &mut xml::OwnedReader,
 ) -> super::Result<css::Stylesheet> {
     let mut stylesheet = css::Stylesheet::default();
 
@@ -106,8 +106,8 @@ fn parse_head<R: embedded_io::Read>(
     Ok(stylesheet)
 }
 
-fn parse_body<R: embedded_io::Read>(
-    reader: &mut xml::OwnedReader<R>,
+fn parse_body(
+    reader: &mut xml::OwnedReader,
     inline_stylesheet: css::Stylesheet,
     extern_stylesheet: Option<&css::Stylesheet>,
     file_resolver: Option<SpineFileResolver>,
@@ -325,7 +325,7 @@ impl BodyParser {
             self.current_run.push(' ');
         }
         self.has_trailing_space = text.ends_with(char::is_whitespace);
-        let decoded = html_escape::decode_html_entities(text);
+        let decoded = super::decode_html_entities(text);
         let text = decoded
             .as_ref()
             .split_whitespace()

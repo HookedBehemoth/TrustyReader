@@ -57,7 +57,7 @@ pub use reader::Reader;
 pub use attributes::AttributeReader;
 
 #[cfg(feature = "alloc")]
-pub type OwnedReader<R> = Reader<R, alloc::vec::Vec<u8>>;
+pub type OwnedReader<'a> = Reader<'a, alloc::vec::Vec<u8>>;
 
 #[derive(Debug)]
 pub enum Error {

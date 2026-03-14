@@ -62,8 +62,8 @@ pub fn parse(file: &mut impl File, file_resolver: FileResolver, rootfile: &str) 
     let entry = file_resolver
         .file(rootfile)
         .ok_or(EpubError::FileMissing(RequiredFileTypes::ContentOpf))?;
-    let reader = ZipEntryReader::new(file, entry)?;
-    let mut parser = xml::Reader::new(reader, entry.size as _, 4096)?;
+    let mut reader = ZipEntryReader::new(file, entry)?;
+    let mut parser = xml::Reader::new(&mut reader, entry.size as _, 4096)?;
 
     let mut metadata = None;
     let mut manifest = BTreeMap::<String, ManifestItem>::new();
@@ -152,7 +152,7 @@ pub fn parse(file: &mut impl File, file_resolver: FileResolver, rootfile: &str) 
     Ok(epub)
 }
 
-fn parse_metadata<R: embedded_io::Read>(parser: &mut xml::OwnedReader<R>) -> Result<Metadata> {
+fn parse_metadata(parser: &mut xml::OwnedReader) -> Result<Metadata> {
     info!("Parsing metadata");
 
     let mut title = None;
@@ -165,12 +165,14 @@ fn parse_metadata<R: embedded_io::Read>(parser: &mut xml::OwnedReader<R>) -> Res
                 let xml::Event::Text { content } = parser.next_event()? else {
                     return Err(EpubError::InvalidData);
                 };
+                let content = super::decode_html_entities(&content);
                 title = Some(content.to_string());
             }
             xml::Event::StartElement { name: "dc:creator", .. } => {
                 let xml::Event::Text { content } = parser.next_event()? else {
                     return Err(EpubError::InvalidData);
                 };
+                let content = super::decode_html_entities(&content);
                 author = Some(content.to_string());
             }
             xml::Event::StartElement { name: "dc:language", .. } => {
@@ -205,8 +207,8 @@ fn parse_metadata<R: embedded_io::Read>(parser: &mut xml::OwnedReader<R>) -> Res
     })
 }
 
-fn parse_manifest<R: embedded_io::Read>(
-    parser: &mut xml::OwnedReader<R>,
+fn parse_manifest(
+    parser: &mut xml::OwnedReader,
     file_resolver: &FileResolver,
 ) -> Result<BTreeMap<String, ManifestItem>> {
     info!("Parsing manifest");
@@ -242,8 +244,8 @@ fn parse_manifest<R: embedded_io::Read>(
     Ok(manifest)
 }
 
-fn parse_spine<R: embedded_io::Read>(
-    parser: &mut xml::OwnedReader<R>,
+fn parse_spine(
+    parser: &mut xml::OwnedReader,
     manifest: &BTreeMap<String, ManifestItem>,
 ) -> Result<Vec<SpineItem>> {
     info!("Parsing spine");

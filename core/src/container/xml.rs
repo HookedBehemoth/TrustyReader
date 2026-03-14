@@ -5,7 +5,8 @@ use core::fmt::Write;
 use embedded_xml as xml;
 
 pub fn from_str(text: &str) -> Option<book::Chapter> {
-    let mut reader = xml::Reader::new(text.as_bytes(), text.len() as _, 8096).ok()?;
+    let mut data = text.as_bytes();
+    let mut reader = xml::Reader::new(&mut data, text.len() as _, 8096).ok()?;
 
     let mut depth = 0;
 

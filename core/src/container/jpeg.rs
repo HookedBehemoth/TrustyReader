@@ -156,10 +156,22 @@ impl JpegState {
     }
 }
 
-// BitReader: generic over byte source
+// Object-safe read trait so BitReader (and everything below) is non-generic.
 
-struct BitReader<R> {
-    source: R,
+trait ReadBytes {
+    fn read_bytes(&mut self, buf: &mut [u8]) -> Result<usize, &'static str>;
+}
+
+impl<R: embedded_io::Read> ReadBytes for R {
+    fn read_bytes(&mut self, buf: &mut [u8]) -> Result<usize, &'static str> {
+        self.read(buf).map_err(|_| "jpeg: read error")
+    }
+}
+
+// BitReader: uses dyn ReadBytes to avoid monomorphisation
+
+struct BitReader<'a> {
+    source: &'a mut dyn ReadBytes,
     cache: Vec<u8>,
     cache_pos: usize,
     cache_len: usize,
@@ -168,8 +180,8 @@ struct BitReader<R> {
     marker: u8, // stashed marker byte (non-zero = encountered during next_byte)
 }
 
-impl<R: embedded_io::Read> BitReader<R> {
-    fn new(source: R) -> Self {
+impl<'a> BitReader<'a> {
+    fn new(source: &'a mut dyn ReadBytes) -> Self {
         Self {
             source,
             cache: alloc::vec![0u8; 512],
@@ -184,7 +196,7 @@ impl<R: embedded_io::Read> BitReader<R> {
     #[inline(always)]
     fn next_byte_inner(&mut self) -> Result<u8, &'static str> {
         if self.cache_pos >= self.cache_len {
-            let n = self.source.read(&mut self.cache).map_err(|_| "jpeg: read error")?;
+            let n = self.source.read_bytes(&mut self.cache)?;
             if n == 0 {
                 return Err("jpeg: unexpected end of data");
             }
@@ -386,7 +398,7 @@ pub fn decode_jpeg_streaming<R: embedded_io::Read + embedded_io::Seek>(
 
     reader.seek(embedded_io::SeekFrom::Start(st.scan_start as u64)).map_err(|_| "jpeg: seek error")?;
 
-    decode_baseline(&st, BitReader::new(reader), max_w, max_h)
+    decode_baseline(&st, BitReader::new(&mut reader), max_w, max_h)
 }
 
 // baseline decode core (generic over byte source)
@@ -408,9 +420,9 @@ fn validate_tables(st: &JpegState) -> Result<(), &'static str> {
     Ok(())
 }
 
-fn decode_baseline<R: embedded_io::Read>(
+fn decode_baseline(
     st: &JpegState,
-    mut reader: BitReader<R>,
+    mut reader: BitReader<'_>,
     max_w: u16,
     max_h: u16,
 ) -> Result<DecodedImage, &'static str> {
@@ -833,8 +845,8 @@ fn build_huff_table(table: &mut HuffTable, bits: &[u8; 16], vals: &[u8]) {
 // Huffman decode
 
 #[inline(always)]
-fn huff_decode<R: embedded_io::Read>(
-    r: &mut BitReader<R>,
+fn huff_decode(
+    r: &mut BitReader<'_>,
     t: &HuffTable,
 ) -> Result<u8, &'static str> {
     let peek8 = r.peek(8)? as usize;
@@ -867,8 +879,8 @@ fn extend(bits: u32, size: u8) -> i32 {
 
 // block decode (Y) / skip (non-Y)
 
-fn decode_block<R: embedded_io::Read>(
-    r: &mut BitReader<R>,
+fn decode_block(
+    r: &mut BitReader<'_>,
     dc_ht: &HuffTable,
     ac_ht: &HuffTable,
     dc_pred: &mut i32,
@@ -916,8 +928,8 @@ fn decode_block<R: embedded_io::Read>(
     Ok(())
 }
 
-fn skip_block<R: embedded_io::Read>(
-    r: &mut BitReader<R>,
+fn skip_block(
+    r: &mut BitReader<'_>,
     dc_ht: &HuffTable,
     ac_ht: &HuffTable,
     dc_pred: &mut i32,

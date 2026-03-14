@@ -19,6 +19,16 @@ macro_rules! trace {
     };
 }
 
+pub trait ReadBytes {
+    fn read_bytes(&mut self, buf: &mut [u8]) -> Result<usize>;
+}
+
+impl<R: embedded_io::Read> ReadBytes for R {
+    fn read_bytes(&mut self, buf: &mut [u8]) -> Result<usize> {
+        self.read(buf).map_err(|e| crate::Error::IoError(e.kind()))
+    }
+}
+
 struct FakeFinder {
     hash: u32,
     hash_2pow: u32,
@@ -72,8 +82,8 @@ const fn f(needle: &'static str) -> Needle {
 
 /// A streaming XML reader.
 /// The temporary buffer can be owned or borrowed
-pub struct Reader<R, Buffer> {
-    reader: R,
+pub struct Reader<'a, Buffer> {
+    reader: &'a mut dyn ReadBytes,
     remaining: usize,
     buffer: Buffer,
     pos: usize,
@@ -81,7 +91,7 @@ pub struct Reader<R, Buffer> {
     self_closing: Option<Range<usize>>,
 }
 
-impl<'a, R: embedded_io::Read> Reader<R, &'a mut [u8]> {
+impl<'a> Reader<'a, &'a mut [u8]> {
     /// Creates a new Reader with a borrowed buffer.
     /// ```
     /// # use embedded_xml as xml;
@@ -93,13 +103,13 @@ impl<'a, R: embedded_io::Read> Reader<R, &'a mut [u8]> {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn new_borrowed(reader: R, total_size: usize, buffer: &'a mut [u8]) -> Result<Self> {
+    pub fn new_borrowed(reader: &'a mut dyn ReadBytes, total_size: usize, buffer: &'a mut [u8]) -> Result<Self> {
         Self::new_with_read(reader, total_size, buffer)
     }
 }
 
 #[cfg(feature = "alloc")]
-impl<R: embedded_io::Read> Reader<R, alloc::vec::Vec<u8>> {
+impl<'a> Reader<'a, alloc::vec::Vec<u8>> {
     /// Creates a new Reader with an owned buffer of size `buffer_size`.
     /// ```
     /// # use embedded_xml as xml;
@@ -110,17 +120,16 @@ impl<R: embedded_io::Read> Reader<R, alloc::vec::Vec<u8>> {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn new(reader: R, total_size: usize, buffer_size: usize) -> Result<Self> {
+    pub fn new(reader: &'a mut dyn ReadBytes, total_size: usize, buffer_size: usize) -> Result<Self> {
         let buffer = alloc::vec![0; buffer_size];
         Self::new_with_read(reader, total_size, buffer)
     }
 }
 
-impl<R: embedded_io::Read, Buffer: AsRef<[u8]> + AsMut<[u8]>> Reader<R, Buffer> {
-    fn new_with_read(mut reader: R, total_size: usize, mut buffer: Buffer) -> Result<Self> {
+impl<'a, Buffer: AsRef<[u8]> + AsMut<[u8]>> Reader<'a, Buffer> {
+    fn new_with_read(reader: &'a mut dyn ReadBytes, total_size: usize, mut buffer: Buffer) -> Result<Self> {
         let end = reader
-            .read(buffer.as_mut())
-            .map_err(|e| crate::Error::IoError(e.kind()))?;
+            .read_bytes(buffer.as_mut())?;
         let remaining = total_size - end;
         Ok(Reader {
             reader,
@@ -284,8 +293,7 @@ impl<R: embedded_io::Read, Buffer: AsRef<[u8]> + AsMut<[u8]>> Reader<R, Buffer> 
         let data_start = self.buffer.as_ref().len() - offset;
         let read_bytes = self
             .reader
-            .read(&mut self.buffer.as_mut()[data_start..])
-            .map_err(|e| crate::Error::IoError(e.kind()))?;
+            .read_bytes(&mut self.buffer.as_mut()[data_start..])?;
         self.end += read_bytes;
         self.remaining -= read_bytes;
         trace!(
@@ -429,8 +437,8 @@ mod tests {
         }
 
         let data = LOREM.as_bytes();
-        let buffer = data;
-        let mut parser = Reader::new(buffer, data.len(), 256).unwrap();
+        let mut buffer = data;
+        let mut parser = Reader::new(&mut buffer, data.len(), 256).unwrap();
         let ipsum = find_str(&mut parser, "Lorem ", " dolor").unwrap();
         assert_eq!(ipsum, "ipsum");
         let aliquyam = find_str(&mut parser, "no sea takimata ", " ctus est").unwrap();
