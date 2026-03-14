@@ -237,6 +237,7 @@ pub struct FIL {
     sect: DWORD,        // LBA_t
     dir_sect: DWORD,    // LBA_t (only if !FF_FS_READONLY)
     dir_ptr: *mut BYTE, // (only if !FF_FS_READONLY)
+    buf: [BYTE; 512],     // File private data read/write window
 }
 
 // DIR structure from ff.h
@@ -268,8 +269,8 @@ const _: () = assert!(
     "FFOBJID size must be 48 bytes to match C"
 );
 const _: () = assert!(
-    core::mem::size_of::<FIL>() == 80,
-    "FIL size must be 80 bytes to match C"
+    core::mem::size_of::<FIL>() == 80 + 512,
+    "FIL size must be 80 + 512 bytes to match C"
 );
 const _: () = assert!(
     core::mem::size_of::<DIR>() == 80,

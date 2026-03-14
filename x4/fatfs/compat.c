@@ -21,7 +21,7 @@ static_assert(sizeof(WCHAR) == 2, "WCHAR size mismatch");
 static_assert(sizeof(UINT) == 4, "UINT size mismatch");
 
 static_assert(sizeof(FFOBJID) == 48, "FFOBJID size mismatch with Rust");
-static_assert(sizeof(FIL) == 80, "FIL size mismatch with Rust");
+static_assert(sizeof(FIL) == 80 + 512, "FIL size mismatch with Rust");
 static_assert(sizeof(DIR) == 80, "DIR size mismatch with Rust");
 static_assert(sizeof(FILINFO) == 288, "FILINFO size mismatch with Rust");
 
