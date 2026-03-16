@@ -1,3 +1,10 @@
 [build]
 
 target = "riscv32imc-unknown-none-elf"
+
+[target.riscv32imc-unknown-none-elf]
+runner = "run.sh"
+# runner = "espflash flash --monitor --chip esp32c3"
+
+[unstable]
+build-std = ["alloc", "core"]

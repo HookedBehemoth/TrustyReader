@@ -5,18 +5,18 @@ fn main() {
 
     cc::Build::new()
         .compiler("riscv32-esp-elf-gcc")
-        .file("fatfs/ff.c")
-        .file("fatfs/ffsystem.c")
-        .file("fatfs/ffunicode.c")
-        .file("fatfs/compat.c")
+        .file("../libs/fatfs/ff.c")
+        .file("../libs/fatfs/ffsystem.c")
+        .file("../libs/fatfs/ffunicode.c")
+        .file("../libs/fatfs/compat.c")
         .compile("fatfs");
-    println!("cargo:rerun-if-changed=fatfs/diskio.h");
-    println!("cargo:rerun-if-changed=fatfs/ff.c");
-    println!("cargo:rerun-if-changed=fatfs/ff.h");
-    println!("cargo:rerun-if-changed=fatfs/ffconf.h");
-    println!("cargo:rerun-if-changed=fatfs/ffsystem.c");
-    println!("cargo:rerun-if-changed=fatfs/ffunicode.c");
-    println!("cargo:rerun-if-changed=fatfs/compat.c");
+    println!("cargo:rerun-if-changed=../libs/fatfs/diskio.h");
+    println!("cargo:rerun-if-changed=../libs/fatfs/ff.c");
+    println!("cargo:rerun-if-changed=../libs/fatfs/ff.h");
+    println!("cargo:rerun-if-changed=../libs/fatfs/ffconf.h");
+    println!("cargo:rerun-if-changed=../libs/fatfs/ffsystem.c");
+    println!("cargo:rerun-if-changed=../libs/fatfs/ffunicode.c");
+    println!("cargo:rerun-if-changed=../libs/fatfs/compat.c");
 }
 
 fn linker_be_nice() {

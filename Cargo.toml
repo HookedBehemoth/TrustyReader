@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["core", "desktop", "libs/embedded_xml", "libs/embedded_zip", "x4"]
+members = ["core", "desktop", "libs/embedded_xml", "libs/embedded_zip", "x4", "s3"]
 
 [workspace.package]
 edition      = "2024"

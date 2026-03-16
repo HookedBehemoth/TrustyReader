@@ -28,6 +28,7 @@ target/
 bench.bin
 baseline.bin
 firmware.bin
+firmware-s3.bin
 *.epub
 
 *.opf

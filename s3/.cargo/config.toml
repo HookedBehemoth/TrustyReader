@@ -1,0 +1,8 @@
+[build]
+target = "xtensa-esp32s3-none-elf"
+
+[env]
+ESP_LOG = "info"
+
+[unstable]
+build-std = ["alloc", "core"]

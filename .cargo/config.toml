@@ -1,7 +1,3 @@
-[target.riscv32imc-unknown-none-elf]
-runner = "run.sh"
-# runner = "espflash flash --monitor --chip esp32c3"
-
 rustflags = [
   # Required to obtain backtraces (e.g. when using the "esp-backtrace" crate.)
   # NOTE: May negatively impact performance of produced code
@@ -14,5 +10,5 @@ ESP_LOG="info"
 ESPFLASH_BAUD="921600"
 MONITOR_BAUD="115200"
 
-# [unstable]
-# build-std = ["alloc", "core"]
+[unstable]
+build-std = ["alloc", "core"]

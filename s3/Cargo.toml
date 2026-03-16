@@ -1,0 +1,39 @@
+[package]
+name = "trusty-s3"
+edition.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+log.workspace = true
+trusty-core = { path = "../core" }
+
+# In 1.0.0 GPIO Pins 12-17 aren't exposed
+esp-hal = { git = "https://github.com/esp-rs/esp-hal", features = ["esp32s3", "log-04", "unstable"] }
+esp-bootloader-esp-idf = { git = "https://github.com/esp-rs/esp-hal", features = ["esp32s3", "log-04"] }
+esp-rtos = { git = "https://github.com/esp-rs/esp-hal", features = ["alloc", "embassy", "esp-radio", "esp32s3", "log-04"] }
+esp-alloc = { git = "https://github.com/esp-rs/esp-hal", features = ["internal-heap-stats", "compat"] }
+esp-backtrace = { git = "https://github.com/esp-rs/esp-hal", features = [
+  "esp32s3",
+  "panic-handler",
+  "println",
+] }
+esp-storage = { git = "https://github.com/esp-rs/esp-hal", features = ["esp32s3"] }
+esp-println = { git = "https://github.com/esp-rs/esp-hal", features = ["esp32s3", "log-04", "timestamp"] }
+embedded-graphics.workspace = true
+embedded-hal = "1.0.0"
+embedded-hal-bus = "0.3.0"
+nb = "1.1.0"
+embassy-executor = "0.9.1"
+embassy-sync = "0.7.2"
+embedded-io-async = { version = "0.7.0", features = ["alloc"] }
+static_cell = "2.1.1"
+embassy-time = "0.5.0"
+embedded-sdmmc = "0.9.0"
+embedded-io.workspace = true
+embassy-futures = { version = "0.1.2", features = ["log"] }
+embedded-zip.workspace = true
+embedded-xml.workspace = true
+
+[build-dependencies]
+cc = "1.0"
