@@ -162,13 +162,33 @@ impl<Filesystem: fs::Filesystem> Book<Filesystem> {
         }
     }
 
-    pub fn image(&self, key: u16, max: (u16, u16), file: &mut impl File) -> Option<image::DecodedImage> {
+    pub fn image(
+        &self,
+        key: u16,
+        (w, h): (u16, u16),
+        file: &mut impl File,
+    ) -> Option<image::DecodedImage> {
+        let cache_key = alloc::format!("image_{key}_{w}x{h}.poi");
+        if let Some(image) = self
+            .open_cache_file(&cache_key, crate::fs::Mode::Read)
+            .and_then(|mut cached_file| image::DecodedImage::from_cache(&mut cached_file))
+        {
+            log::info!("Loaded image {key} {w}x{h} from cache");
+            return Some(image);
+        }
+
         let image = match &self.format {
-            BookFormat::Epub(epub) => epub::parse_image(epub, key, max, file).ok(),
+            BookFormat::Epub(epub) => epub::parse_image(epub, key, (w, h), file).ok(),
             _ => None,
-        };
-        
-        image
+        }?;
+
+        log::info!("Decoded image {key} {w}x{h}");
+
+        if let Some(()) = self.open_cache_file(&cache_key, crate::fs::Mode::Write)
+            .and_then(|mut cache_file| image.to_cache(&mut cache_file)) {
+            log::info!("Cached image");
+        }
+        Some(image)
     }
 
     pub fn language(&self) -> Option<hypher::Lang> {

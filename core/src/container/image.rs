@@ -13,6 +13,8 @@ pub struct DecodedImage {
     pub data: alloc::vec::Vec<u8>,
 }
 
+const CACHE_FILE_MAGIC: &[u8; 4] = b"POI1";
+
 impl DecodedImage {
     pub fn blit(
         &self,
@@ -20,6 +22,34 @@ impl DecodedImage {
         buffers: &mut crate::framebuffer::DisplayBuffers,
     ) {
         buffers.blit(&self.data, self.width, self.height, offset);
+    }
+
+    pub fn from_cache(reader: &mut impl crate::fs::File) -> Option<Self> {
+        let size = reader.size();
+        let mut head = [0u8; 8];
+        reader.read_exact(&mut head).ok()?;
+        if head[0..4] != CACHE_FILE_MAGIC[..] {
+            return None;
+        }
+        let width = u16::from_le_bytes([head[4], head[5]]);
+        let height = u16::from_le_bytes([head[6], head[7]]);
+        let mut data: alloc::vec::Vec<u8> = alloc::vec![0u8; size - 8];
+        reader.read_exact(&mut data).ok()?;
+
+        Some(Self {
+            width,
+            height,
+            data,
+        })
+    }
+
+    pub fn to_cache(&self, writer: &mut impl embedded_io::Write) -> Option<()> {
+        writer.write_all(CACHE_FILE_MAGIC).ok()?;
+        writer.write_all(&self.width.to_le_bytes()).ok()?;
+        writer.write_all(&self.height.to_le_bytes()).ok()?;
+        writer.write_all(&self.data).ok()?;
+
+        Some(())
     }
 }
 

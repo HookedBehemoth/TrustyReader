@@ -84,9 +84,9 @@ impl<'a, R: Read + Seek> ZipEntryReader<'a, R> {
         }
 
         let inflater = if compression == COMPRESSION_DEFLATE {
-            Some(Box::new(inflate::stream::InflateState::new(
+            Some(inflate::stream::InflateState::new_boxed(
                 DataFormat::Raw,
-            )))
+            ))
         } else {
             None
         };
