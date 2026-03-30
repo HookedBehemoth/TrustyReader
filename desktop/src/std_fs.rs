@@ -158,6 +158,9 @@ impl trusty_core::fs::Directory for StdDirectory {
                     let is_directory = metadata.is_dir();
                     let size = metadata.len() as usize;
                     let name = dir_entry.file_name().to_string_lossy().into_owned();
+                    if name.starts_with(".") {
+                        continue;
+                    }
                     result.push(StdDirEntry { name, size, is_directory });
                 }
                 Err(_) => return Err(embedded_io::ErrorKind::InvalidInput),
