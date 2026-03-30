@@ -9,6 +9,3 @@ rustflags = [
 ESP_LOG="info"
 ESPFLASH_BAUD="921600"
 MONITOR_BAUD="115200"
-
-[unstable]
-build-std = ["alloc", "core"]
