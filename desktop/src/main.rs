@@ -62,9 +62,11 @@ fn main() {
     let mut application = Application::with_intent(&mut display_buffers, fs, intent);
     let charge = ChargeState { level: 75, charging: true };
 
-    while display.is_open() {
+    while display.is_open() && application.running() {
         display.update();
         application.update(&display.get_buttons(), charge);
         application.draw(&mut display);
     }
+
+    std::thread::sleep(std::time::Duration::from_millis(1_500));
 }

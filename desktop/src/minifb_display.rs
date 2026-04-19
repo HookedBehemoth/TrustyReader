@@ -124,6 +124,9 @@ impl MinifbDisplay {
     pub fn update(&mut self) {
         self.window.update();
         let mut current: u8 = 0;
+        if self.window.is_key_down(minifb::Key::Delete) {
+            current |= 1 << (Buttons::Power as u8);
+        }
         if self.window.is_key_down(minifb::Key::Left) {
             current |= 1 << (Buttons::Left as u8);
         }

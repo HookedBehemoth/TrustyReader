@@ -1,5 +1,6 @@
 use alloc::boxed::Box;
 
+use embedded_graphics::prelude::OriginDimensions;
 use log::info;
 
 use crate::activities::ActivityType;
@@ -12,6 +13,7 @@ use crate::activities::settings::SettingsActivity;
 
 use crate::container::image;
 use crate::display::RefreshMode;
+use crate::fs::DirEntry;
 use crate::res::img::bebop;
 
 use crate::{
@@ -109,12 +111,7 @@ where
 
     pub fn draw(&mut self, display: &mut impl crate::display::Display) {
         if self.sleep {
-            self.display_buffers
-                .get_active_buffer_mut()
-                .copy_from_slice(bebop::BEBOP);
-            display.display(self.display_buffers, RefreshMode::Full);
-            display.copy_grayscale_buffers(bebop::BEBOP_LSB, bebop::BEBOP_MSB);
-            display.display_differential_grayscale(true);
+            self.draw_sleep(display);
             return;
         }
         if !self.dirty {
@@ -156,6 +153,54 @@ where
                 }
             }
         }
+    }
+
+    fn draw_sleep(&mut self, display: &mut impl crate::display::Display) {
+        // TODO: should this be an activity?
+        // free all resources so we don't have to worry about memory
+        self.activity = None;
+
+        // attempt to draw custom sleep screen if available, otherwise fall back to static one
+        if let Some(()) = self.draw_custom_sleep(display) {
+            return;
+        }
+
+        self.draw_static_sleep(display);
+    }
+
+    fn draw_custom_sleep(&mut self, display: &mut impl crate::display::Display) -> Option<()> {
+        let sleep_path = ".sleep";
+        let fb_size = self.display_buffers.size();
+        let sleep_dir = self.filesystem.open_directory(sleep_path).ok()?;
+        let entries = sleep_dir.list().ok()?;
+        for entry in entries.iter().filter(|e| !e.is_directory()) {
+            let name = entry.name();
+
+            log::debug!("Attempting to load sleep image: {}", name);
+
+            let Some(image) = image::load_and_cache(&self.filesystem, sleep_path, entry, fb_size) else {
+                continue;
+            };
+
+            let y_offset = fb_size.height.saturating_sub(image.height as _) / 2;
+            log::info!("Loaded sleep screen from cache: {}", name);
+            self.display_buffers.clear_screen(0xff);
+            image.blit(y_offset as _, self.display_buffers);
+            display.display(self.display_buffers, RefreshMode::Full);
+            return Some(());
+        }
+
+        // no image found
+        None
+    }
+
+    fn draw_static_sleep(&mut self, display: &mut impl crate::display::Display) {
+        self.display_buffers
+            .get_active_buffer_mut()
+            .copy_from_slice(bebop::BEBOP);
+        display.display(self.display_buffers, RefreshMode::Full);
+        display.copy_grayscale_buffers(bebop::BEBOP_LSB, bebop::BEBOP_MSB);
+        display.display_differential_grayscale(true);
     }
 }
 

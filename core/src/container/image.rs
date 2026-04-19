@@ -1,3 +1,4 @@
+use embedded_graphics::prelude::Size;
 use embedded_io::{Read, Seek};
 
 use crate::{
@@ -70,6 +71,62 @@ pub fn decode<R: Read + Seek>(
             Ok(image)
         }
     }
+}
+
+pub fn load_and_cache<F: crate::fs::Filesystem>(
+    fs: &F,
+    dir: &str,
+    entry: &impl crate::fs::DirEntry,
+    max_size: Size,
+) -> Option<DecodedImage> {
+    let name = entry.name();
+    // ensure we only recognize image files
+    let Some(ext) = name.rsplit('.').next() else {
+        log::debug!("Skipping file with no extension");
+        return None;
+    };
+    let Some(format) = get_format(&ext) else {
+        log::debug!("Skipping non-image file");
+        return None;
+    };
+
+    // attempt to load cached file
+    let path = alloc::format!("{dir}/{name}");
+    let cache_path = alloc::format!("{path}.cache");
+
+    if let Some(image) = fs
+        .open_file(&cache_path, crate::fs::Mode::Read)
+        .ok()
+        .and_then(|mut file| DecodedImage::from_cache(&mut file))
+    {
+        log::debug!("Loaded image from cache: {}", cache_path);
+        return Some(image);
+    }
+    log::debug!("No cache found, attempting to decode");
+    
+    let Ok(mut file) = fs.open_file(&path, crate::fs::Mode::Read)
+    else {
+        log::debug!("Failed to open file");
+        return None;
+    };
+    let size = entry.size() as _;
+    let max_w = max_size.width as _;
+    let max_h = max_size.height as _;
+
+    let Ok(image) = decode(format, &mut file, size, max_w, max_h) else {
+        log::debug!("Failed to decode sleep image");
+        return None;
+    };
+
+    // attempt to cache, don't fail hard
+    fs.open_file(&cache_path, crate::fs::Mode::Write)
+        .ok()
+        .and_then(|mut file| {
+            image.to_cache(&mut file);
+            Some(())
+        });
+
+    Some(image)
 }
 
 /// Read image dimensions without decoding pixel data.
