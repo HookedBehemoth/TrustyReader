@@ -9,6 +9,7 @@ fn main() {
         .file("../libs/fatfs/ffsystem.c")
         .file("../libs/fatfs/ffunicode.c")
         .file("../libs/fatfs/compat.c")
+        .flag("-std=c23")
         .compile("fatfs");
     println!("cargo:rerun-if-changed=../libs/fatfs/diskio.h");
     println!("cargo:rerun-if-changed=../libs/fatfs/ff.c");
