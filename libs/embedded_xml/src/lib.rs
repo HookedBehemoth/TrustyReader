@@ -39,7 +39,7 @@ loop {
 */
 
 #![no_std]
-// stable in 1.95
+// stable in 1.96
 #![feature(assert_matches)]
 
 mod reader;
