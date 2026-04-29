@@ -86,4 +86,8 @@ impl super::Activity for SettingsActivity {
 
         display.display(buffers, RefreshMode::Fast);
     }
+
+    fn to_activity_type(&self) -> super::ActivityType {
+        super::ActivityType::Settings
+    }
 }

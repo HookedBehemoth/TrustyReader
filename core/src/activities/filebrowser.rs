@@ -93,16 +93,12 @@ impl<FileEntry: crate::fs::DirEntry> super::Activity for FileBrowser<FileEntry> 
                 );
                 return super::UpdateResult::None;
             };
-            let current = super::ActivityType::FileBrowser {
-                focus: *self.focus,
-                path: self.path.clone(),
-            };
             if entry.is_directory() {
                 let next = super::ActivityType::FileBrowser { focus: 0, path };
-                super::UpdateResult::PushActivity { current, next }
+                super::UpdateResult::PushActivity(next)
             } else {
                 let next = super::ActivityType::Reader { path };
-                super::UpdateResult::PushActivity { current, next }
+                super::UpdateResult::PushActivity(next)
             }
         } else {
             super::UpdateResult::None
@@ -137,5 +133,12 @@ impl<FileEntry: crate::fs::DirEntry> super::Activity for FileBrowser<FileEntry> 
         }
 
         display.display(buffers, RefreshMode::Fast);
+    }
+
+    fn to_activity_type(&self) -> super::ActivityType {
+        super::ActivityType::FileBrowser {
+            focus: *self.focus,
+            path: self.path.clone(),
+        }
     }
 }

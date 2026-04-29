@@ -13,7 +13,7 @@ use crate::{
     input::Buttons,
 };
 
-#[derive(Clone, Copy, PartialEq, Eq, rotate_enum::RotateEnum, strum_macros::EnumIter)]
+#[derive(Clone, Copy, PartialEq, Eq, rotate_enum::RotateEnum, strum_macros::EnumIter, serde::Serialize, serde::Deserialize, Debug)]
 pub enum Focus {
     FileBrowser,
     Demo,
@@ -54,20 +54,10 @@ impl super::Activity for HomeActivity {
             self.focus = self.focus.next();
             super::UpdateResult::Redraw
         } else if buttons.is_pressed(Buttons::Confirm) {
-            let current = super::ActivityType::Home { state: self.focus };
             match self.focus {
-                Focus::FileBrowser => super::UpdateResult::PushActivity {
-                    current,
-                    next: super::ActivityType::file_browser(),
-                },
-                Focus::Demo => super::UpdateResult::PushActivity {
-                    current,
-                    next: super::ActivityType::Demo,
-                },
-                Focus::Settings => super::UpdateResult::PushActivity {
-                    current,
-                    next: super::ActivityType::Settings,
-                },
+                Focus::FileBrowser => super::UpdateResult::PushActivity(super::ActivityType::file_browser()),
+                Focus::Demo => super::UpdateResult::PushActivity(super::ActivityType::Demo { screen: 0 }),
+                Focus::Settings => super::UpdateResult::PushActivity(super::ActivityType::Settings),
             }
         } else if state.charge.level.abs_diff(self.charge.level) >= 5 {
             self.charge = state.charge;
@@ -110,5 +100,9 @@ impl super::Activity for HomeActivity {
             .ok();
 
         display.display(buffers, RefreshMode::Fast);
+    }
+
+    fn to_activity_type(&self) -> super::ActivityType {
+        super::ActivityType::Home { state: self.focus }
     }
 }

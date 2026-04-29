@@ -35,13 +35,6 @@ fn main() {
 
     log::info!("Trusty desktop application started");
 
-    let intent = if let Some(file) = args.file_to_open.clone() {
-        log::info!("Opening file on startup: {}", file);
-        ActivityType::reader(&file)
-    } else {
-        ActivityType::home()
-    };
-
     let rotation = match args.rotation {
         0 => framebuffer::Rotation::Rotate0,
         90 => framebuffer::Rotation::Rotate90,
@@ -59,7 +52,15 @@ fn main() {
     let mut display_buffers = Box::new(DisplayBuffers::with_rotation(rotation));
     let mut display = MinifbDisplay::new(rotation, scale);
     let fs = StdFilesystem::new_with_base_path(args.fs_base_path.into());
-    let mut application = Application::with_intent(&mut display_buffers, fs, intent);
+    
+    let mut application = if let Some(file) = args.file_to_open.clone() {
+        log::info!("Opening file on startup: {}", file);
+        let intent = ActivityType::reader(&file);
+        Application::with_intent(&mut display_buffers, fs, intent)
+    } else {
+        Application::new(&mut display_buffers, fs)
+    };
+
     let charge = ChargeState { level: 75, charging: true };
 
     while display.is_open() && application.running() {
@@ -68,5 +69,7 @@ fn main() {
         application.draw(&mut display);
     }
 
-    std::thread::sleep(std::time::Duration::from_millis(1_500));
+    if application.sleeping() {
+        std::thread::sleep(std::time::Duration::from_millis(1_500));
+    }
 }

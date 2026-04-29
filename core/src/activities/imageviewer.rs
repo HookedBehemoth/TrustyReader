@@ -12,6 +12,7 @@ use crate::{
 pub struct ImageViewerActivity<Filesystem: fs::Filesystem> {
     format: Format,
     image: Option<Result<image::DecodedImage, &'static str>>,
+    file_path: super::Path,
     file: Option<Filesystem::File>,
 }
 
@@ -19,7 +20,7 @@ impl<Filesystem: fs::Filesystem> ImageViewerActivity<Filesystem> {
     pub fn new(fs: &Filesystem, path: &str, format: Format) -> Self {
         let file = fs.open_file(path, fs::Mode::Read).ok();
 
-        ImageViewerActivity { format, image: None, file }
+        ImageViewerActivity { format, image: None, file, file_path: path.try_into().unwrap() }
     }
 
     fn load_image(&mut self, rotation: Rotation) {
@@ -71,5 +72,9 @@ impl<Filesystem: fs::Filesystem> super::Activity for ImageViewerActivity<Filesys
         } else {
             super::UpdateResult::None
         }
+    }
+
+    fn to_activity_type(&self) -> super::ActivityType {
+        super::ActivityType::Reader { path: self.file_path.clone() }
     }
 }

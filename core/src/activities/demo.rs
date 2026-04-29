@@ -25,8 +25,8 @@ pub struct DemoActivity {
 }
 
 impl DemoActivity {
-    pub fn new() -> Self {
-        Self { screen: 10, full_refresh: true }
+    pub fn new(screen: usize) -> Self {
+        Self { screen, full_refresh: true }
     }
 
     fn draw_bebop(&self, display: &mut dyn Display, buffers: &mut DisplayBuffers) {
@@ -451,5 +451,9 @@ impl super::Activity for DemoActivity {
             _ => self.draw_shapes(display, buffers),
         }
         self.full_refresh = false;
+    }
+
+    fn to_activity_type(&self) -> super::ActivityType {
+        super::ActivityType::Demo { screen: self.screen }
     }
 }

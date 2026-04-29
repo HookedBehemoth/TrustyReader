@@ -5,7 +5,7 @@ use embedded_graphics::{
 use log::{info, warn};
 
 use crate::{
-    container::{book, image}, display::RefreshMode, framebuffer::DisplayBuffers, input::Buttons, layout, res::font
+    activities::Path, container::{book, image}, display::RefreshMode, framebuffer::DisplayBuffers, input::Buttons, layout, res::font
 };
 
 pub struct ReaderActivity<Filesystem>
@@ -19,6 +19,7 @@ where
     indent: u16,
     language: hypher::Lang,
     debug_width: bool,
+    file_path: Path,
     file: Filesystem::File,
     book: Option<book::Book<Filesystem>>,
     chapter_idx: usize,
@@ -65,6 +66,7 @@ impl<Filesystem: crate::fs::Filesystem> ReaderActivity<Filesystem> {
             indent: 10,
             language,
             debug_width: false,
+            file_path: file_path.try_into().unwrap(),
             file,
             book,
             chapter_idx: 0,
@@ -715,5 +717,11 @@ impl<Filesystem: crate::fs::Filesystem> super::Activity for ReaderActivity<Files
         self.draw_layed_out_text(font, &all_lines, &y_offsets, x_start, y_start, font::Mode::Lsb, buffers);
         display.copy_to_lsb(buffers.get_active_buffer());
         display.display_differential_grayscale(false);
+    }
+
+    fn to_activity_type(&self) -> super::ActivityType {
+        super::ActivityType::Reader {
+            path: self.file_path.clone(),
+        }
     }
 }

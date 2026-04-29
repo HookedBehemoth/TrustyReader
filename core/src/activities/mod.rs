@@ -14,12 +14,12 @@ pub mod settings;
 
 pub type Path = heapless::String<256>;
 
-#[derive(Clone)]
+#[derive(Clone, serde::Serialize, serde::Deserialize, Debug)]
 pub enum ActivityType {
     Home { state: home::Focus },
     FileBrowser { focus: u8, path: Path },
     Settings,
-    Demo,
+    Demo { screen: usize },
     Reader { path: Path },
 }
 
@@ -45,10 +45,7 @@ pub enum UpdateResult {
     Redraw,
     SetRotation(Rotation),
     PopActivity,
-    PushActivity {
-        current: ActivityType,
-        next: ActivityType,
-    },
+    PushActivity(ActivityType),
     Ota,
 }
 
@@ -63,4 +60,5 @@ pub trait Activity {
     fn close(&mut self) {}
     fn update(&mut self, state: &ApplicationState) -> UpdateResult;
     fn draw(&mut self, display: &mut dyn Display, buffers: &mut DisplayBuffers);
+    fn to_activity_type(&self) -> ActivityType;
 }
