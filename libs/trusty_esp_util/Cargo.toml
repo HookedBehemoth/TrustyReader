@@ -1,0 +1,16 @@
+[package]
+name = "trusty-esp-util"
+edition.workspace = true
+rust-version.workspace = true
+version = "1.0.0"
+keywords = []
+description = "Shared util across esp-hal dependend platforms."
+readme = "README.md"
+repository.workspace = true
+license-file.workspace = true
+
+[dependencies]
+esp-hal = { git = "https://github.com/esp-rs/esp-hal" }
+esp-bootloader-esp-idf = { git = "https://github.com/esp-rs/esp-hal" }
+esp-storage = { git = "https://github.com/esp-rs/esp-hal" }
+log.workspace = true

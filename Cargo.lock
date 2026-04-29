@@ -2548,6 +2548,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "trusty-esp-util"
+version = "1.0.0"
+dependencies = [
+ "esp-bootloader-esp-idf",
+ "esp-hal",
+ "esp-storage",
+ "log",
+]
+
+[[package]]
 name = "trusty-s3"
 version = "0.1.0"
 dependencies = [
@@ -2575,6 +2585,7 @@ dependencies = [
  "nb 1.1.0",
  "static_cell",
  "trusty-core",
+ "trusty-esp-util",
 ]
 
 [[package]]
@@ -2605,6 +2616,7 @@ dependencies = [
  "nb 1.1.0",
  "static_cell",
  "trusty-core",
+ "trusty-esp-util",
 ]
 
 [[package]]

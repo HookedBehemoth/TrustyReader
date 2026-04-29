@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["core", "desktop", "libs/embedded_xml", "libs/embedded_zip", "x4", "s3"]
+members = ["core", "desktop", "libs/embedded_xml", "libs/embedded_zip", "libs/trusty_esp_util", "x4", "s3"]
 
 [workspace.package]
 edition      = "2024"
@@ -17,6 +17,7 @@ embedded-graphics = "0.8.1"
 embedded-io = "0.6.1"
 embedded-xml = { path = "libs/embedded_xml" }
 embedded-zip = { path = "libs/embedded_zip" }
+trusty-esp-util = { path = "libs/trusty_esp_util" }
 
 [profile.dev]
 # Rust debug is too slow.

@@ -42,6 +42,7 @@ embedded-io.workspace = true
 embassy-futures = { version = "0.1.2", features = ["log"] }
 embedded-zip.workspace = true
 embedded-xml.workspace = true
+trusty-esp-util.workspace = true
 
 [build-dependencies]
 cc = "1.0"
