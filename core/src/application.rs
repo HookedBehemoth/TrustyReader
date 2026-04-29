@@ -158,7 +158,7 @@ where
     fn draw_sleep(&mut self, display: &mut impl crate::display::Display) {
         // TODO: should this be an activity?
         // free all resources so we don't have to worry about memory
-        self.activity = None;
+        self.activity.take().map(|mut a| a.close());
 
         // attempt to draw custom sleep screen if available, otherwise fall back to static one
         if let Some(()) = self.draw_custom_sleep(display) {

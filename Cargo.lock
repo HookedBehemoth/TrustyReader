@@ -2551,10 +2551,15 @@ dependencies = [
 name = "trusty-esp-util"
 version = "1.0.0"
 dependencies = [
+ "embedded-hal 1.0.0",
+ "embedded-hal-bus",
+ "embedded-io 0.6.1",
+ "embedded-sdmmc",
  "esp-bootloader-esp-idf",
  "esp-hal",
  "esp-storage",
  "log",
+ "trusty-core",
 ]
 
 [[package]]
@@ -2602,7 +2607,6 @@ dependencies = [
  "embedded-hal-bus",
  "embedded-io 0.6.1",
  "embedded-io-async 0.7.0",
- "embedded-sdmmc",
  "embedded-xml",
  "embedded-zip",
  "esp-alloc",

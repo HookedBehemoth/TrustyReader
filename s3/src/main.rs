@@ -9,13 +9,11 @@
 
 // pub mod adc_input;
 pub mod eink_display;
-pub mod sdspi_fatfs;
 
 use core::cell::RefCell;
 
 // use crate::adc_input::*;
 use crate::eink_display::EInkDisplay;
-use crate::sdspi_fatfs::FatFs;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use embassy_executor::Spawner;
@@ -200,7 +198,7 @@ async fn main(spawner: Spawner) {
         let sdcard_spi = RefCellDevice::new(shared_spi, sdcard_cs, delay)
             .expect("Failed to create SPI device for SD card");
 
-        FatFs::new(sdcard_spi, delay)
+        trusty_esp_util::sdspi_fatfs::FatFs::new(sdcard_spi, delay)
     };
 
     info!("Display complete! Starting Application...");
@@ -261,7 +259,11 @@ async fn main(spawner: Spawner) {
         application.draw(&mut display);
     }
 
-    if has_ota && application.ota_running() {
+    let ota_requested = application.ota_running();
+
+    drop(application);
+
+    if has_ota && ota_requested {
         info!("OTA requested; switching boot partition");
         trusty_esp_util::ota::switch_ota(&mut flash);
     }

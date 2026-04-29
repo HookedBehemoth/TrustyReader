@@ -13,4 +13,9 @@ license-file.workspace = true
 esp-hal = { git = "https://github.com/esp-rs/esp-hal" }
 esp-bootloader-esp-idf = { git = "https://github.com/esp-rs/esp-hal" }
 esp-storage = { git = "https://github.com/esp-rs/esp-hal" }
+embedded-hal = "1.0.0"
+embedded-hal-bus = "0.3.0"
+embedded-io.workspace = true
+embedded-sdmmc = "0.9.0"
 log.workspace = true
+trusty-core.workspace = true

@@ -17,6 +17,7 @@ embedded-graphics = "0.8.1"
 embedded-io = "0.6.1"
 embedded-xml = { path = "libs/embedded_xml" }
 embedded-zip = { path = "libs/embedded_zip" }
+trusty-core = { path = "core" }
 trusty-esp-util = { path = "libs/trusty_esp_util" }
 
 [profile.dev]

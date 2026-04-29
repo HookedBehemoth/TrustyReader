@@ -14,7 +14,6 @@ path = "src/baseline.rs"
 
 [dependencies]
 log.workspace = true
-trusty-core = { path = "../core" }
 
 # In 1.0.0 GPIO Pins 12-17 aren't exposed
 esp-hal = { git = "https://github.com/esp-rs/esp-hal", features = ["esp32c3", "log-04", "unstable"] }
@@ -37,11 +36,12 @@ embassy-sync = "0.7.2"
 embedded-io-async = { version = "0.7.0", features = ["alloc"] }
 static_cell = "2.1.1"
 embassy-time = "0.5.0"
-embedded-sdmmc = "0.9.0"
 embedded-io.workspace = true
 embassy-futures = { version = "0.1.2", features = ["log"] }
 embedded-zip.workspace = true
 embedded-xml.workspace = true
+
+trusty-core.workspace = true
 trusty-esp-util.workspace = true
 
 [build-dependencies]
